@@ -1,0 +1,1406 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>リレーショナルデータベースと SQL — SQLite3 による演習</title>
+<meta name="description" content="リレーショナルデータベースの基礎概念（キー・外部キー・スキーマ・ER図・中間テーブル）と、SQLite3 を用いた SQL の演習。">
+<script>
+  (function () {
+    var t = localStorage.getItem('theme');
+    if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <button class="btn icon" id="menuBtn" type="button" aria-label="目次">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+  </button>
+  <a class="brand" href="#top">リレーショナルデータベースと SQL</a>
+  <span class="spacer"></span>
+  <button class="btn" id="pgOpen" type="button" title="ブラウザ内の SQLite（補助用）">Playground</button>
+  <button class="btn icon" id="themeBtn" type="button" aria-label="ライト／ダーク切り替え" title="ライト／ダーク切り替え">
+    <svg class="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    <svg class="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+  </button>
+  <div class="progress" id="progress"></div>
+</header>
+
+<div class="layout">
+  <nav class="sidebar" aria-label="目次"><ul class="toc" id="toc"></ul></nav>
+
+  <main class="content" id="top">
+  <div class="prose">
+
+  <div class="titleblock">
+    <h1>リレーショナルデータベースと SQL</h1>
+    <p>SQLite3 による演習。第0章で考え方と用語を押さえ、第1〜4章で SQL を実際に打って学ぶ。</p>
+  </div>
+
+  <!-- ===================================================== GUIDE -->
+  <section class="chapter" id="guide" data-num="" data-short="はじめに">
+    <div class="chapter-head"><h2>はじめに</h2></div>
+
+    <h3 data-short="表記">表記</h3>
+    <p>行頭の <code>%</code> はシェル（Ubuntu の端末、macOS のターミナル）への入力、<code>sqlite&gt;</code> は sqlite3 への入力、<code>...&gt;</code> は前の行の続きを表す。プロンプトのない行は出力である。出力の1行目は列名である（<a href="#ch1-2">1.2</a> の設定による）。</p>
+    <pre class="term">
+% sqlite3 library.db
+sqlite> SELECT bid, title FROM books
+   ...> WHERE year &lt; 1910;
+bid|title
+B01|坊っちゃん
+B02|吾輩は猫である
+    </pre>
+    <p>各ブロック右上の「コピー」は、プロンプトと出力を除いた<strong>入力すべき文だけ</strong>をコピーする。行にカーソルを合わせると、その文だけをコピーするボタンが出る。</p>
+    <p>本文中の出力例は、すべて実際に sqlite3 で実行した結果である。</p>
+    <div class="callout"><span class="title">読み方</span>各章は「定義 → 例 → コマンド → 演習」の順に並んでいる。<strong>各章の最後の「発展」は読み飛ばしてよい</strong>。それ以外を順に読めば、演習は最後まで進められる。</div>
+
+    <h3 data-short="進め方">進め方</h3>
+    <ul>
+      <li>演習は<strong>自分の PC のターミナル</strong>で行う。コピーして貼り付けるだけでなく、出力が本文と一致するかを確認すること。</li>
+      <li>各章の演習問題は、解答例を見る前に自分で解く。解答例は問題の下に折りたたんである。</li>
+      <li>右上の Playground はブラウザ内で SQL を試せる補助機能である。ファイル操作やバックアップは扱えないので、演習の代わりにはならない。</li>
+    </ul>
+
+    <h3 id="help" data-short="困ったとき">困ったとき</h3>
+    <p>本資料について個別の質問対応は行わない。エラーや分からない点は、生成 AI（ChatGPT、Claude、Gemini など）に質問して解決すること。回答の質は質問に含まれる情報で決まる。次のテンプレートを埋めて質問するとよい。</p>
+    <pre class="code" data-lang="text" data-label="質問テンプレート">
+SQLite3 で SQL の演習をしています。次の問題の原因と直し方を、理由とともに教えてください。
+
+【環境】
+OS: （例: Windows 11 + WSL2 Ubuntu 24.04 / macOS 15）
+sqlite3 --version の出力:
+
+【実行したコマンド（そのまま貼る）】
+
+
+【表示された結果・エラー（全文をそのまま貼る）】
+
+
+【やりたかったこと】
+（例: books から 300 ページ以上の本を表示したい）
+    </pre>
+    <ul>
+      <li>エラーメッセージは要約せず全文を貼る。</li>
+      <li>AI の回答は誤ることがある。示されたコマンドは意味を理解してから実行し、結果を自分で確かめる。<code>DELETE</code>・<code>DROP</code>・<code>rm</code> を含むものは、実行前にバックアップを取る（<a href="#ch2-3">2.3</a>）。</li>
+      <li>答えだけでなく「なぜそうなるか」を尋ねると、次に同じ問題が起きたとき自分で直せる。</li>
+    </ul>
+  </section>
+
+  <!-- ===================================================== CHAPTER 0 -->
+  <section class="chapter" id="ch0" data-num="0" data-short="基礎概念">
+    <div class="chapter-head"><div class="label">第0章</div><h2>リレーショナルデータベースの基礎概念</h2>
+      <p class="chapter-sub">なぜ表を分けるのか。主キー、外部キー、ER 図、中間テーブル、CRUD とトランザクション。</p></div>
+
+    <h3 data-short="動機"><span class="sec-num">0.1</span>動機：貸出ノートの限界</h3>
+    <p>図書委員が、本を貸すたびに<strong>貸出ノート</strong>（紙でも Excel でもよい）へ1行ずつ書き足していく方式で記録していたとする。</p>
+    <div class="table-wrap">
+      <div class="table-caption"><span class="tname">貸出ノート</span></div>
+      <table class="data">
+        <thead><tr><th>貸出日</th><th>氏名</th><th>クラス</th><th>書名</th><th>著者</th></tr></thead>
+        <tbody>
+          <tr><td>04-10</td><td>佐藤 花子</td><td>1-A</td><td>坊っちゃん</td><td>夏目漱石</td></tr>
+          <tr><td>04-18</td><td>佐藤 花子</td><td>1-B</td><td>こころ</td><td>夏目漱石</td></tr>
+          <tr><td>04-21</td><td>佐藤 花子</td><td class="bad">（空欄）</td><td>吾輩は猫である</td><td class="bad">夏目 漱石</td></tr>
+          <tr><td>05-02</td><td>田中 美咲</td><td>2-A</td><td>坊っちゃん</td><td>夏目漱石</td></tr>
+          <tr><td>05-15</td><td>佐藤 花子</td><td>1-A</td><td class="bad">坊ちゃん</td><td>夏目漱石</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>1か月後、司書の先生から次のように頼まれた。このノートでは、どれにも正確には答えられない。</p>
+    <div class="grid cols-2">
+      <div class="card"><h4><span class="ico">1</span>「夏目漱石の本は何回借りられた？」</h4><p>「夏目 漱石」「坊ちゃん」のような書き方の揺れがあり、検索や数え上げで漏れる。毎回手で書くので、揺れはなくならない。</p></div>
+      <div class="card"><h4><span class="ico">2</span>「佐藤 花子さんに返却を催促して」</h4><p>佐藤 花子は 1-A と 1-B に2人いる。クラスが空欄の3行目は、どちらの貸出か分からない。</p></div>
+      <div class="card"><h4><span class="ico">3</span>「羅生門は図書室にある？」</h4><p>一度も借りられていない本はノートに一度も出てこないので、蔵書かどうか分からない。</p></div>
+      <div class="card"><h4><span class="ico">4</span>「去年のページは捨てていいよ」</h4><p>捨てると、そこにしか書かれていなかった本や生徒の情報まで消えてしまう。</p></div>
+    </div>
+    <p>原因は、<strong>生徒・本・貸出という別々のものを1冊のノートに混ぜて書いている</strong>ことにある。実際の図書室では、本に<strong>バーコード（本の番号）</strong>が貼られ、生徒には<strong>生徒証（学籍番号）</strong>があり、貸出のときは<strong>2つの番号だけ</strong>を読み取って記録する。名前や書名は、生徒名簿と蔵書リストに1回だけ書かれている。</p>
+    <div class="tables-row">
+      <div class="table-wrap"><div class="table-caption"><span class="tname">students</span>　生徒名簿</div>
+        <table class="data"><thead><tr><th>sid<span class="k pk">PK</span></th><th>name</th><th>class</th></tr></thead>
+        <tbody><tr><td class="id hl">S01</td><td>佐藤 花子</td><td>1-A</td></tr><tr><td class="id">S03</td><td>佐藤 花子</td><td>1-B</td></tr><tr><td class="id">S05</td><td>田中 美咲</td><td>2-A</td></tr></tbody></table></div>
+      <div class="table-wrap"><div class="table-caption"><span class="tname">books</span>　蔵書リスト</div>
+        <table class="data"><thead><tr><th>bid<span class="k pk">PK</span></th><th>title</th></tr></thead>
+        <tbody><tr><td class="id hl">B01</td><td>坊っちゃん</td></tr><tr><td class="id">B03</td><td>こころ</td></tr><tr><td class="id">B05</td><td>羅生門</td></tr></tbody></table></div>
+    </div>
+    <div class="table-wrap"><div class="table-caption"><span class="tname">loans</span>　貸出記録（番号だけを書く）</div>
+      <table class="data"><thead><tr><th>lid<span class="k pk">PK</span></th><th>sid<span class="k fk">FK</span></th><th>bid<span class="k fk">FK</span></th><th>loan_date</th></tr></thead>
+      <tbody><tr><td class="id">1</td><td class="id hl">S01</td><td class="id hl">B01</td><td>2026-04-10</td></tr><tr><td class="id">3</td><td class="id">S03</td><td class="id">B03</td><td>2026-04-18</td></tr><tr><td class="id">6</td><td class="id">S05</td><td class="id hl">B01</td><td>2026-05-02</td></tr><tr><td class="id">8</td><td class="id hl">S01</td><td class="id hl">B01</td><td>2026-05-15</td></tr></tbody></table></div>
+    <p>こうすると、書名や著者は蔵書リストの1か所にしかないので揺れない（1）。番号で人を区別できる（2）。借りられていない本も蔵書リストにある（3）。古い貸出記録を消しても名簿と蔵書リストは残る（4）。</p>
+    <p>このように<strong>ものごとの種類ごとに表を分け、番号で表どうしをつなぐ</strong>方式でデータを管理するのが<strong>リレーショナルデータベース</strong>（RDB）である。以下ではその基本的な用語を定義する。</p>
+
+    <h3 data-short="テーブル・列・行"><span class="sec-num">0.2</span>テーブル・列・行</h3>
+    <div class="def">
+      <span class="def-title">定義 0.1（テーブル）<span class="en">table</span></span>
+      <p class="gist">テーブルとは、<strong>同じ項目（列）をもつ行の集まり</strong>である。</p>
+      <ul>
+        <li><strong>列</strong>（カラム）：データの項目。列ごとに名前と、入れてよい値の種類（データ型）が決まっている。</li>
+        <li><strong>行</strong>（レコード）：1件分のデータ。各列に値を1つずつもつ。</li>
+      </ul>
+    </div>
+    <div class="table-wrap">
+      <div class="table-caption"><span class="tname">students</span>（テーブル）</div>
+      <table class="data">
+        <thead><tr><th class="hl">sid<span class="sub">← 列</span></th><th>name</th><th>class</th><th>number</th></tr></thead>
+        <tbody>
+          <tr><td class="hl">S01</td><td>佐藤 花子</td><td>1-A</td><td>12</td></tr>
+          <tr><td class="hl" style="outline:2px solid var(--accent);outline-offset:-2px">S02</td><td style="outline:2px solid var(--accent);outline-offset:-2px">鈴木 一郎</td><td style="outline:2px solid var(--accent);outline-offset:-2px">1-A</td><td style="outline:2px solid var(--accent);outline-offset:-2px">15</td></tr>
+          <tr><td class="hl">S03</td><td>佐藤 花子</td><td>1-B</td><td>12</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted" style="margin-top:-8px">色の付いた縦の並びが列 sid、枠で囲んだ横1行が行（生徒1人分）。</p>
+    <p>1つのテーブルには<strong>1種類のもの</strong>（生徒なら生徒だけ）を入れる。値が分からない・まだ無いマスには <strong>NULL</strong>（ヌル）という特別な印が入る（<a href="#ch1-9">1.9</a>）。</p>
+
+    <h3 data-short="主キー"><span class="sec-num">0.3</span>主キー：行を1つに決める列</h3>
+    <p>0.1 の「同姓同名を区別できない」は、行を1つに決める手がかりがないことが原因だった。</p>
+    <div class="def">
+      <span class="def-title">定義 0.2（主キー）<span class="en">primary key</span></span>
+      <p class="gist">値を指定すれば<strong>行が必ず1つに決まる</strong>列（または列の組み合わせ）のうち、その表の<strong>代表として1つ選んだ</strong>もの。主キーの列には<strong>重複も NULL も許されない</strong>。</p>
+      <p>生徒の表では学籍番号 <code>sid</code> が主キーである。氏名は同姓同名がありうるので主キーにできない。2列の組み合わせで主キーにすることもある（例：<a href="#ch0-6">0.6</a> の <code>(bid, aid)</code>）。</p>
+      <p class="reason"><span>理由</span>NULL は「値が分からない」という印なので、NULL の行を「この番号の行」と指すことはできない。</p>
+    </div>
+    <p>候補が複数あるとき（学籍番号、メールアドレス、クラスと出席番号の組など）は、<strong>途中で値が変わらない・必ず値がある・短い</strong>ものを選ぶ。SQL では <code>PRIMARY KEY</code> と書く。SQLite では主キーの列にも <code>NOT NULL</code> を書いておく（書かないと NULL が入ってしまう）。</p>
+
+    <h3 data-short="外部キー"><span class="sec-num">0.4</span>外部キー：表と表をつなぐ列</h3>
+    <div class="def">
+      <span class="def-title">定義 0.3（外部キー）<span class="en">foreign key</span></span>
+      <p class="gist">他の表の主キーの値を入れて、<strong>その表の行を指す列</strong>。入れてよいのは、<strong>指す先の表に実際にある値</strong>（または NULL）だけである。</p>
+      <p>この「指す先が必ず存在する」というルールを<strong>参照整合性制約</strong>という。</p>
+    </div>
+    <p>loans の <code>sid</code> は、students の主キー <code>sid</code> を指す外部キーである。存在しない生徒 S99 への貸出（下の lid=9）は登録できず、貸出記録から指されている生徒 S01 は削除できない。</p>
+    <div class="tables-row">
+      <div class="table-wrap"><div class="table-caption"><span class="tname">loans</span>（指す側）</div>
+        <table class="data"><thead><tr><th>lid<span class="k pk">PK</span></th><th class="hl">sid<span class="k fk">FK</span></th></tr></thead>
+        <tbody><tr><td class="id">1</td><td class="id hl">S01</td></tr><tr><td class="id">2</td><td class="id hl">S02</td></tr><tr><td class="id">9</td><td class="id bad">S99</td></tr></tbody></table></div>
+      <div class="table-wrap"><div class="table-caption"><span class="tname">students</span>（指される側）</div>
+        <table class="data"><thead><tr><th class="hl">sid<span class="k pk">PK</span></th><th>name</th></tr></thead>
+        <tbody><tr><td class="id hl">S01</td><td>佐藤 花子</td></tr><tr><td class="id hl">S02</td><td>鈴木 一郎</td></tr><tr><td class="id">S03</td><td>佐藤 花子</td></tr></tbody></table></div>
+    </div>
+    <div class="callout warn"><span class="title">SQLite は最初、外部キーをチェックしない</span>sqlite3 を起動するたびに <code>PRAGMA foreign_keys = ON;</code> が必要である。設定方法は <a href="#ch2-2">2.2</a> で扱う。</div>
+
+    <h3 data-short="ER 図"><span class="sec-num">0.5</span>ER 図と「何対何」</h3>
+    <p>表と外部キーのつながりを図にしたものが <strong>ER 図</strong> である。箱が表、箱の中が列、線が外部キーによるつながりを表す。線の端の記号は、行どうしが<strong>何対何で対応するか</strong>を表す。</p>
+    <div class="def">
+      <span class="def-title">定義 0.4（カーディナリティ）<span class="en">cardinality</span></span>
+      <p class="gist">2つの表の行どうしが「何対何」で対応するか。次の3種類がある。</p>
+      <div class="table-wrap" style="margin:8px 0 4px"><table class="plain">
+        <thead><tr><th>種類</th><th>意味</th><th>例</th></tr></thead>
+        <tbody>
+          <tr><td><strong>1&nbsp;対&nbsp;1</strong></td><td>どちらから見ても相手は1つ</td><td>生徒と生徒証</td></tr>
+          <tr><td><strong>1&nbsp;対&nbsp;N</strong></td><td>一方から見ると相手はたくさん、もう一方から見ると相手は1つ</td><td>クラスと生徒</td></tr>
+          <tr><td><strong>M&nbsp;対&nbsp;N</strong></td><td>どちらから見ても相手がたくさんありうる</td><td>生徒と部活（兼部あり）、本と著者（共著あり）</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="thm">
+      <span class="def-title">性質 0.1</span>
+      <p>1&nbsp;対&nbsp;N のつながりは、<strong>N 側の表に、1 側の主キーを指す外部キーを1列</strong>置けば表せる。</p>
+      <p class="reason"><span>理由</span>生徒（N 側）から見るとクラスは1つなので、生徒の各行にクラスの番号を1つ書けば済む。クラス側に生徒の番号を書こうとすると、1つのマスに何十人分も書くことになる。</p>
+    </div>
+    <figure class="fig" data-er="core">
+      <div class="legend">
+        <span><svg width="26" height="14"><rect x="2" y="0" width="21" height="14" rx="2" style="fill:var(--accent)"/><text x="12.5" y="10.5" text-anchor="middle" style="fill:var(--accent-fg);font:700 9px var(--font-mono)">PK</text></svg>主キー</span>
+        <span><svg width="26" height="14"><rect x="2.5" y=".5" width="20" height="13" rx="2" style="fill:none;stroke:var(--accent)"/><text x="12.5" y="10.5" text-anchor="middle" style="fill:var(--accent);font:700 9px var(--font-mono)">FK</text></svg>外部キー</span>
+        <span><svg width="30" height="14"><path d="M0 7H30M8 1v12M13 1v12" style="stroke:var(--accent);stroke-width:1.4;fill:none"/></svg>1</span>
+        <span><svg width="30" height="14"><path d="M0 7H30M16 7L30 0M16 7L30 14M12 1v12" style="stroke:var(--accent);stroke-width:1.4;fill:none"/></svg>N（多）</span>
+      </div>
+      <figcaption>図 0.1　生徒・貸出・本。1回の貸出は生徒1人・本1冊に対応し、生徒や本は何回でも貸出に登場しうる。</figcaption>
+    </figure>
+
+    <h3 data-short="中間テーブル"><span class="sec-num">0.6</span>多対多と中間テーブル</h3>
+    <p>本と著者は <strong>M&nbsp;対&nbsp;N</strong> である（1人の著者が何冊も書き、1冊に何人もの著者がいうる）。どちらから見ても相手が1つに決まらないので、性質 0.1 のように外部キーを1列置くだけでは表せない。「1つのマスに著者を並べて書く」「author1, author2 と列を増やす」はどちらも、検索しにくく、人数の上限ができてしまう。</p>
+    <div class="def">
+      <span class="def-title">定義 0.5（中間テーブル）<span class="en">junction table</span></span>
+      <p class="gist">「どの本と、どの著者がつながっているか」という<strong>組を1行に1つずつ書く表</strong>。列は両側の主キー（bid と aid、どちらも外部キー）で、2列の組 (bid, aid) を主キーにする。</p>
+    </div>
+    <div class="thm">
+      <span class="def-title">性質 0.2</span>
+      <p>中間テーブルの<strong>1行</strong>と、<strong>つながっている組1つ</strong>（下の図の線1本）は、過不足なく1対1に対応する（数学でいう全単射）。そして本と中間テーブルは 1&nbsp;対&nbsp;N、中間テーブルと著者は N&nbsp;対&nbsp;1 である。つまり <strong>M&nbsp;対&nbsp;N は、中間テーブルを挟むと 1&nbsp;対&nbsp;N と N&nbsp;対&nbsp;1 に分解できる</strong>。</p>
+      <p class="reason"><span>理由</span>線を1本ずつ1行に書き写したのが中間テーブルで、(bid, aid) が主キーなので同じ線を2回書けない。各行には本と著者の番号が1つずつなので、行から見た相手はそれぞれ1つになる。</p>
+    </div>
+    <figure class="fig" data-bip="1">
+      <figcaption>図 0.2　線1本が book_authors の1行に対応する（丸数字が対応）。共著の B06 には線が2本、森鷗外（A06）には線も行もない。</figcaption>
+    </figure>
+    <figure class="fig" data-er="nm">
+      <figcaption>図 0.3　中間テーブル book_authors で、M&nbsp;対&nbsp;N を 1&nbsp;対&nbsp;N と N&nbsp;対&nbsp;1 に分解した ER 図。</figcaption>
+    </figure>
+
+    <h3 data-short="CRUD とトランザクション"><span class="sec-num">0.7</span>データの操作：CRUD とトランザクション</h3>
+    <p>ここまでは表の「形」の話だった。ここからは表の中身を「操作する」側の話である。</p>
+    <div class="def">
+      <span class="def-title">定義 0.6（CRUD）<span class="en">create / read / update / delete</span></span>
+      <p class="gist">データに対する基本操作は、<strong>作る・読む・更新する・削除する</strong>の4つしかない。頭文字をとって CRUD（クラッド）という。</p>
+      <div class="table-wrap" style="margin:8px 0 4px"><table class="plain">
+        <thead><tr><th>操作</th><th>SQL</th><th>図書室の例</th><th>本資料</th></tr></thead>
+        <tbody>
+          <tr><td><strong>C</strong>reate（作成）</td><td><code>INSERT</code></td><td>新しい貸出を記録する</td><td><a href="#ch1-6">1.6</a></td></tr>
+          <tr><td><strong>R</strong>ead（読み取り）</td><td><code>SELECT</code></td><td>貸出中の本を一覧する</td><td><a href="#ch1-7">1.7</a>、第3・4章</td></tr>
+          <tr><td><strong>U</strong>pdate（更新）</td><td><code>UPDATE</code></td><td>返却日を書き込む</td><td><a href="#ch1-10">1.10</a></td></tr>
+          <tr><td><strong>D</strong>elete（削除）</td><td><code>DELETE</code></td><td>古い貸出記録を消す</td><td><a href="#ch2-4">2.4</a></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <p>ところが、意味のある1つの作業が、複数の操作でできていることがある。例えば「S01 が坊っちゃんを返し、その場で S02 が借りる」は、</p>
+    <ol>
+      <li>S01 の貸出記録に返却日を書く（UPDATE）</li>
+      <li>S02 の新しい貸出記録を作る（INSERT）</li>
+    </ol>
+    <p>の2つの操作からなる。もし 1 の直後に停電したら、記録上は「本棚にあるはずの本が見つからない」。2 だけが実行されたら「1冊の本を2人が同時に借りている」。どちらも現実と合わない記録が残る。</p>
+    <div class="def">
+      <span class="def-title">定義 0.7（トランザクション）<span class="en">transaction</span></span>
+      <p class="gist">複数の操作を<strong>「全部実行する」か「何もしなかったことにする」かのどちらかにしかならない</strong>ようにまとめた、ひとかたまりの処理。</p>
+      <p>SQL では <code>BEGIN</code> で始め、<code>COMMIT</code> で確定する。途中でやめたいときは <code>ROLLBACK</code> で開始前の状態に戻す（<a href="#ch2-6">2.6</a> で実際に試す）。</p>
+    </div>
+    <p>RDBMS はトランザクションについて、次の4つの性質を保証する。頭文字をとって <strong>ACID</strong>（アシッド）という。</p>
+    <div class="table-wrap"><table class="plain">
+      <thead><tr><th>性質</th><th>意味</th><th>図書室の例</th></tr></thead>
+      <tbody>
+        <tr><td><strong>A</strong>tomicity<br>原子性</td><td>全部実行されるか、まったく実行されないかのどちらか。途中までの状態は残らない。</td><td>返却と次の貸出の途中で停電しても、どちらか片方だけが記録されることはない。</td></tr>
+        <tr><td><strong>C</strong>onsistency<br>一貫性</td><td>制約（主キー・外部キーなど）を破る状態では確定しない。</td><td>存在しない生徒への貸出を含む処理は確定できない。</td></tr>
+        <tr><td><strong>I</strong>solation<br>独立性</td><td>同時に実行しても、1つずつ順番に実行したのと同じ結果になる。</td><td>図書委員2人が同時に同じ本を貸し出そうとしても、二重に貸し出されない。</td></tr>
+        <tr><td><strong>D</strong>urability<br>永続性</td><td>確定（COMMIT）した結果は、直後に電源が落ちても失われない。</td><td>「貸出を記録しました」と表示された後なら、停電しても記録は残る。</td></tr>
+      </tbody>
+    </table></div>
+    <p class="sub">ACID は、0.1 の貸出ノート（や Excel ファイルを共有して編集する方法）では得られない、RDBMS を使う大きな理由の1つである。銀行の振込（自分の口座から引く・相手の口座に足す）が典型例としてよく挙げられる。</p>
+
+    <h3 data-short="演習用データベース"><span class="sec-num">0.8</span>演習用データベース library</h3>
+    <p>第2章以降では、ここまでの例をまとめた次のデータベースを用いる（作成方法は <a href="#ch2-1">2.1</a>）。</p>
+    <figure class="fig" data-er="library">
+      <figcaption>図 0.4　library のスキーマ。</figcaption>
+    </figure>
+    <details class="fold"><summary>5つの表の中身を見る</summary>
+    <div class="tables-row">
+      <div class="table-wrap"><div class="table-caption"><span class="tname">students</span>　生徒</div>
+        <table class="data"><thead><tr><th>sid<span class="k pk">PK</span></th><th>name</th><th>class</th><th>number</th></tr></thead>
+        <tbody>
+          <tr><td class="id">S01</td><td>佐藤 花子</td><td>1-A</td><td>12</td></tr>
+          <tr><td class="id">S02</td><td>鈴木 一郎</td><td>1-A</td><td>15</td></tr>
+          <tr><td class="id">S03</td><td>佐藤 花子</td><td>1-B</td><td>12</td></tr>
+          <tr><td class="id">S04</td><td>高橋 健</td><td>1-B</td><td>20</td></tr>
+          <tr><td class="id">S05</td><td>田中 美咲</td><td>2-A</td><td>15</td></tr>
+          <tr><td class="id">S06</td><td>伊藤 翔</td><td>2-A</td><td>3</td></tr>
+        </tbody></table></div>
+      <div class="table-wrap"><div class="table-caption"><span class="tname">books</span>　本</div>
+        <table class="data"><thead><tr><th>bid<span class="k pk">PK</span></th><th>title</th><th>year</th><th>pages</th></tr></thead>
+        <tbody>
+          <tr><td class="id">B01</td><td>坊っちゃん</td><td>1906</td><td>200</td></tr>
+          <tr><td class="id">B02</td><td>吾輩は猫である</td><td>1905</td><td>480</td></tr>
+          <tr><td class="id">B03</td><td>こころ</td><td>1914</td><td>320</td></tr>
+          <tr><td class="id">B04</td><td>銀河鉄道の夜</td><td>1934</td><td>180</td></tr>
+          <tr><td class="id">B05</td><td>羅生門</td><td>1915</td><td>NULL</td></tr>
+          <tr><td class="id">B06</td><td>データベースの基礎</td><td>2020</td><td>300</td></tr>
+        </tbody></table></div>
+    </div>
+    <div class="tables-row">
+      <div class="table-wrap"><div class="table-caption"><span class="tname">authors</span>　著者</div>
+        <table class="data"><thead><tr><th>aid<span class="k pk">PK</span></th><th>name</th></tr></thead>
+        <tbody>
+          <tr><td class="id">A01</td><td>夏目漱石</td></tr><tr><td class="id">A02</td><td>宮沢賢治</td></tr><tr><td class="id">A03</td><td>芥川龍之介</td></tr>
+          <tr><td class="id">A04</td><td>山田 太郎</td></tr><tr><td class="id">A05</td><td>川口 恵</td></tr><tr><td class="id">A06</td><td>森鷗外</td></tr>
+        </tbody></table></div>
+      <div class="table-wrap"><div class="table-caption"><span class="tname">book_authors</span>　著者対応</div>
+        <table class="data"><thead><tr><th>bid<span class="k pk">PK</span><span class="k fk">FK</span></th><th>aid<span class="k pk">PK</span><span class="k fk">FK</span></th></tr></thead>
+        <tbody>
+          <tr><td class="id">B01</td><td class="id">A01</td></tr><tr><td class="id">B02</td><td class="id">A01</td></tr><tr><td class="id">B03</td><td class="id">A01</td></tr>
+          <tr><td class="id">B04</td><td class="id">A02</td></tr><tr><td class="id">B05</td><td class="id">A03</td></tr><tr><td class="id">B06</td><td class="id">A04</td></tr><tr><td class="id">B06</td><td class="id">A05</td></tr>
+        </tbody></table></div>
+    </div>
+    <div class="table-wrap"><div class="table-caption"><span class="tname">loans</span>　貸出（return_date が NULL ＝ 貸出中）</div>
+      <table class="data"><thead><tr><th>lid<span class="k pk">PK</span></th><th>sid<span class="k fk">FK</span></th><th>bid<span class="k fk">FK</span></th><th>loan_date</th><th>return_date</th></tr></thead>
+      <tbody>
+        <tr><td class="id">1</td><td class="id">S01</td><td class="id">B01</td><td>2026-04-10</td><td>2026-04-17</td></tr>
+        <tr><td class="id">2</td><td class="id">S02</td><td class="id">B01</td><td>2026-04-20</td><td>2026-04-27</td></tr>
+        <tr><td class="id">3</td><td class="id">S03</td><td class="id">B03</td><td>2026-04-18</td><td>NULL</td></tr>
+        <tr><td class="id">4</td><td class="id">S01</td><td class="id">B02</td><td>2026-04-21</td><td>2026-04-28</td></tr>
+        <tr><td class="id">5</td><td class="id">S04</td><td class="id">B04</td><td>2026-05-01</td><td>NULL</td></tr>
+        <tr><td class="id">6</td><td class="id">S05</td><td class="id">B01</td><td>2026-05-02</td><td>2026-05-09</td></tr>
+        <tr><td class="id">7</td><td class="id">S05</td><td class="id">B06</td><td>2026-05-10</td><td>2026-05-12</td></tr>
+        <tr><td class="id">8</td><td class="id">S01</td><td class="id">B01</td><td>2026-05-15</td><td>NULL</td></tr>
+      </tbody></table></div>
+    </details>
+    <p class="small muted">日付は <code>YYYY-MM-DD</code> 形式の文字列で格納している。この形式は文字列の辞書式順序と日付の前後が一致するので、<code>&lt;</code> などでそのまま比較できる。</p>
+
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 0-1</span>何対何と表の設計</div>
+      <div class="ex-body">
+        <p>次の各組は何対何か。外部キーをどちらの表に置くか、または中間テーブルが必要かも答えよ。</p>
+        <ol>
+          <li>クラスと生徒（生徒はちょうど1つのクラスに所属する）</li>
+          <li>生徒と部活（兼部できる）</li>
+          <li>生徒と生徒証（1人1枚）</li>
+        </ol>
+      </div>
+      <details class="answer"><summary>解答例</summary>
+        <ol>
+          <li>1&nbsp;対&nbsp;N。生徒の表に、クラスの主キーを指す外部キーを置く（性質 0.1）。</li>
+          <li>M&nbsp;対&nbsp;N。中間テーブル <code>club_members(sid, club_id)</code> を作り、<code>(sid, club_id)</code> を主キー、各列をそれぞれ生徒・部活への外部キーとする（定義 0.5）。</li>
+          <li>1&nbsp;対&nbsp;1。どちらの表に外部キーを置いてもよいが、外部キー列に <code>UNIQUE</code>（重複禁止）を付ける。付けないと同じ生徒を指す生徒証が複数作れてしまい、1&nbsp;対&nbsp;N を許すことになる。</li>
+        </ol>
+      </details>
+    </div>
+
+    <h3 class="adv" data-short="発展"><span class="sec-num">0.9</span>発展</h3>
+    <p class="adv-lead">ここから先は読まなくても第1章以降に進める。用語をきちんと知りたくなったとき、試験や他の教科書で出会ったときに戻ってくればよい。</p>
+
+    <h4>RDBMS と SQL の役割</h4>
+    <p>RDB を管理するソフトウェアを <strong>RDBMS</strong> といい、利用者は <strong>SQL</strong> という言語で指示を出す。SQL の文は、表の形を決める<strong>データ定義言語</strong>（DDL：<code>CREATE</code> <code>DROP</code> <code>ALTER</code>）、CRUD を行う<strong>データ操作言語</strong>（DML：<code>SELECT</code> <code>INSERT</code> <code>UPDATE</code> <code>DELETE</code>）、<strong>トランザクション制御</strong>（<code>BEGIN</code> <code>COMMIT</code> <code>ROLLBACK</code>）に分けられる。代表例は PostgreSQL、MySQL、Oracle Database、SQLite。本資料の SQLite はサーバを持たず、データベース全体を1ファイルに格納する。SQL は ISO で標準化されているが、製品ごとに対応範囲や独自機能に差がある。</p>
+
+    <h4>理論での呼び方</h4>
+    <p>関係モデル（RDB の理論）では、テーブルを<strong>リレーション</strong>、行を<strong>タプル</strong>、列を<strong>属性</strong>、列がとりうる値の範囲を<strong>定義域</strong>と呼ぶ。理論上のリレーションは数学の「集合」なので、まったく同じ行が2つあることはなく、行の順番にも意味がない。一方 SQL のテーブルは、主キーがなければ同じ内容の行を何行でも持てる（重複を除く <code>DISTINCT</code> があるのはこのため）。</p>
+
+    <h4>スーパーキーと候補キー</h4>
+    <p>0.3 では「行を1つに決められる列のうち代表を主キーにする」とだけ述べた。この「行を1つに決められる列」は、次のように2段階で整理される。</p>
+    <div class="def">
+      <span class="def-title">定義 0.8（スーパーキー）<span class="en">superkey</span></span>
+      <p class="gist">その列（の組み合わせ）の値が分かれば、<strong>行が必ず1つに決まる</strong>もの。</p>
+      <p>{学籍番号} も {学籍番号, 氏名} もスーパーキーである。{氏名} は同姓同名がいると決まらないので違う。「必ず」とは、今のデータでたまたま決まることではなく、規則上これから入るどんなデータでも決まるという意味である。</p>
+    </div>
+    <div class="def">
+      <span class="def-title">定義 0.9（候補キー）<span class="en">candidate key</span></span>
+      <p class="gist">スーパーキーのうち、<strong>ムダな列を含まない</strong>もの。どの列を1つ外しても、もう行が1つに決まらなくなる。</p>
+      <p>{学籍番号, 氏名} は氏名がムダなので候補キーではない。{クラス, 出席番号} はどちらか一方では決まらないので、2列そろって候補キーである。主キーは候補キーの中から選ぶ。</p>
+    </div>
+    <div class="thm">
+      <span class="def-title">性質 0.3</span>
+      <p>スーパーキーに列を付け足してもスーパーキーのままである。だから候補キーかどうかは、<strong>列を1つずつ外して、どれを外しても決まらなくなるか</strong>を確かめればよい。</p>
+      <p class="reason"><span>理由</span>学籍番号だけで1人に決まるなら、学籍番号と氏名の両方が分かればもちろん決まる。情報が増えて決まらなくなることはない。</p>
+    </div>
+    <figure class="keylab" id="keylab">
+      <div class="keylab-head">試してみよう：キーの判定</div>
+      <div class="keylab-body">
+        <p class="small muted" style="margin:0 0 8px">学校の規則：学籍番号は全員違う。同じクラスの中で出席番号は重ならない。メールアドレスは全員違う。同姓同名はありうる。</p>
+        <div class="chips" role="group" aria-label="列を選択"></div>
+        <div class="table-wrap" style="margin:0 0 8px"><table class="data"><thead><tr></tr></thead><tbody></tbody></table></div>
+        <div class="result">
+          <div class="verdict" id="v-sk"><b>スーパーキー</b><span class="v">NO</span></div>
+          <div class="verdict" id="v-ck"><b>候補キー</b><span class="v">NO</span></div>
+          <div class="verdict" id="v-pk"><b>主キー</b><span class="v">NO</span></div>
+        </div>
+        <p class="explain"></p>
+        <p class="presets">例：
+          <button type="button" data-set="1">{氏名}</button>
+          <button type="button" data-set="1,2">{氏名, クラス}</button>
+          <button type="button" data-set="2,3">{クラス, 出席番号}</button>
+          <button type="button" data-set="0,1">{学籍番号, 氏名}</button>
+          <button type="button" data-set="0">{学籍番号}</button>
+        </p>
+      </div>
+    </figure>
+    <h4>スキーマとインスタンス</h4>
+    <p>表の設計図（表名、列名と型、キーなどの制約）を<strong>スキーマ</strong>、ある時点の中身を<strong>インスタンス</strong>という。テストに例えれば、解答用紙の枠と、書き込まれた答えである。キーを「今のデータ」ではなく「規則」で決めるのは、キーが中身ではなく枠（スキーマ）の性質だからである。SQL ではスキーマを <code>CREATE TABLE</code> で書き、sqlite3 では <code>.schema</code> で表示できる。</p>
+
+    <h4>loans は中間テーブルとどう違うか</h4>
+    <p>生徒と本の「借りた」というつながりも M&nbsp;対&nbsp;N だが、S01 は B01 を2回借りている（lid=1, 8）ので、同じ組 (S01, B01) が2行現れる。loans の1行は「組」ではなく「1回の貸出という出来事」なので、(sid, bid) を主キーにできず、出来事ごとの番号 <code>lid</code> を主キーにしている。貸出日・返却日を持つのもこのためである。</p>
+
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 0-2</span>候補キー（発展）</div>
+      <div class="ex-body">
+        <p>表 <code>時間割(曜日, 時限, 教室, 科目, 教員)</code> に次の規則がある。(1) 候補キーをすべて挙げよ。(2) {曜日, 時限, 教室, 科目} はスーパーキーか。候補キーか。</p>
+        <ol>
+          <li>1つの教室では、同じ曜日・時限に1つの科目しか行わない。</li>
+          <li>教員は、同じ曜日・時限に1つの科目しか担当しない。</li>
+          <li>各科目の担当教員は1人である（同じ科目を週に複数回行うことはある）。</li>
+        </ol>
+      </div>
+      <details class="answer"><summary>解答例</summary>
+        <p>(1) {曜日, 時限, 教室}（規則1）、{曜日, 時限, 教員}（規則2）、{曜日, 時限, 科目}。3つ目は規則2・3から従う：同じ曜日・時限に同じ科目が2行あれば、規則3より教員が同じになり、規則2に反する。いずれもどの1列を外しても決まらない（{曜日, 時限} だけでは複数の教室で授業がある）。</p>
+        <p>(2) {曜日, 時限, 教室} を含むのでスーパーキーである（性質 0.3）。しかし科目を外しても決まるので、候補キーではない。</p>
+      </details>
+    </div>
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 0-3</span>中間テーブルの主キー（発展）</div>
+      <div class="ex-body">
+        <p>演習 0-1 の <code>club_members</code> について答えよ。(1) 主キーを <code>(sid, club_id)</code> とすると、どんな誤りが防がれるか。(2) 入部日・退部日を記録し、退部した部活への再入部も許すことにした。表をどう変えるべきか。</p>
+      </div>
+      <details class="answer"><summary>解答例</summary>
+        <p>(1) 同じ生徒を同じ部活に二重に登録すること。これで行と「所属している」組が1対1に対応する（性質 0.2）。</p>
+        <p>(2) 同じ組 (sid, club_id) が入部のたびに現れるので、行は「在籍期間」という出来事になる（loans と同じ状況）。在籍期間ごとの主キー（例：<code>membership_id</code>）を設け、<code>joined_on</code>, <code>left_on</code> 列を追加する。</p>
+      </details>
+    </div>
+  </section>
+
+  <!-- ===================================================== CHAPTER 1 -->
+  <section class="chapter" id="ch1" data-num="1" data-short="SQLite3 の基本操作">
+    <div class="chapter-head"><div class="label">第1章</div><h2>SQLite3 の基本操作</h2>
+      <p class="chapter-sub">環境構築、表の作成（CREATE TABLE）、CRUD のうち追加（INSERT）・検索（SELECT）・更新（UPDATE）</p></div>
+
+    <h3 data-short="環境構築"><span class="sec-num">1.1</span>環境構築</h3>
+    <div class="tabs">
+      <div class="tab-list" role="tablist">
+        <button type="button" role="tab" data-os="win">Windows</button>
+        <button type="button" role="tab" data-os="mac">macOS</button>
+      </div>
+      <div class="tab-panel" role="tabpanel">
+        <p>WSL2（Windows Subsystem for Linux）で Ubuntu を使う。PowerShell を<strong>管理者として</strong>開き、次を実行して再起動する。</p>
+        <pre class="code" data-lang="sh" data-label="PowerShell（管理者）">
+wsl --install
+        </pre>
+        <p>再起動後に開く Ubuntu の画面でユーザ名とパスワードを設定する。以降は Ubuntu（スタートメニューの「Ubuntu」またはターミナル）で作業する。</p>
+        <pre class="term">
+% sudo apt update
+% sudo apt install -y sqlite3
+        </pre>
+      </div>
+      <div class="tab-panel" role="tabpanel" hidden>
+        <p>「ターミナル」（アプリケーション → ユーティリティ）を開く。macOS には sqlite3 が標準で入っている。</p>
+        <p>次のバージョン確認で 3.39 より古い場合のみ、<a href="https://brew.sh/" target="_blank" rel="noopener">Homebrew</a> で新しい版を入れ、そちらが優先されるよう PATH を設定する。</p>
+        <pre class="term">
+% brew install sqlite
+% echo 'export PATH="$(brew --prefix sqlite)/bin:$PATH"' >> ~/.zshrc
+% exec zsh
+        </pre>
+      </div>
+    </div>
+    <p>バージョンを確認する。<strong>3.39.0 以上</strong>であれば本資料の内容はすべて動く（3.39 未満では <a href="#ch3-5">3.5</a> の RIGHT / FULL JOIN が使えない）。</p>
+    <pre class="term">
+% sqlite3 --version
+3.45.1 2024-01-30 16:01:20 e876e51a0ed5c5b3126f52e532044363a014bc594cfefa87ffb5b82257ccalt1 (64-bit)
+    </pre>
+
+    <h3 data-short="表示の設定"><span class="sec-num">1.2</span>表示の設定と作業ディレクトリ</h3>
+    <p>sqlite3 は起動時にホームディレクトリの <code>~/.sqliterc</code> を読み込む。出力に列名を付け、NULL を <code>NULL</code> と表示する設定を書いておく（本文の出力例はこの設定による）。</p>
+    <pre class="term">
+% printf '.headers on\n.nullvalue NULL\n' >> ~/.sqliterc
+% cat ~/.sqliterc
+.headers on
+.nullvalue NULL
+    </pre>
+    <p>演習用のディレクトリを作り、そこへ移動する。以降の作業はすべてこのディレクトリで行う。</p>
+    <pre class="term">
+% mkdir -p ~/sql-practice
+% cd ~/sql-practice
+    </pre>
+
+    <h3 data-short="起動と終了"><span class="sec-num">1.3</span>起動と終了</h3>
+    <p>SQLite では1つのデータベースが1つのファイルである。<code>sqlite3 ファイル名</code> は、ファイルがあれば開き、なければ新しいデータベースとして扱う（実際にファイルが作られるのは最初に書き込んだとき）。<code>.quit</code> で終了する。</p>
+    <pre class="term">
+% sqlite3 school.db
+SQLite version 3.45.1 2024-01-30 16:01:20
+Enter ".help" for usage hints.
+sqlite> .quit
+    </pre>
+    <p>SQL の文は <code>;</code> で終わる。<code>;</code> を打つ前に改行すると、<code>...&gt;</code> と表示されて続きの入力を待つ。</p>
+    <pre class="term" data-run="ch1" data-reset="empty">
+% sqlite3 school.db
+sqlite> SELECT * FROM students
+   ...> ;
+    </pre>
+    <p>まだ表を作っていないのでエラーになる。<code>.</code> で始まる <code>.quit</code> や <code>.tables</code> は SQL ではなく sqlite3 自身のコマンド（ドットコマンド）で、<code>;</code> は不要である。入力が終わらなくなったら <a href="#trouble">付録 A.1</a> を見ること。</p>
+
+    <h3 data-short="CREATE TABLE"><span class="sec-num">1.4</span>表の作成（CREATE TABLE）</h3>
+    <pre class="code">
+CREATE TABLE table_name (
+  column_name type [column_constraint ...],
+  ...
+  [table_constraint, ...]
+);
+    </pre>
+    <div class="table-wrap"><table class="plain">
+      <thead><tr><th>制約</th><th>意味</th></tr></thead>
+      <tbody>
+        <tr><td><code>PRIMARY KEY</code></td><td>主キー。複数列なら表制約として <code>PRIMARY KEY (a, b)</code></td></tr>
+        <tr><td><code>NOT NULL</code></td><td>NULL を禁止</td></tr>
+        <tr><td><code>UNIQUE</code></td><td>重複を禁止（主キー以外の候補キーに用いる）</td></tr>
+        <tr><td><code>REFERENCES t (c)</code></td><td>表 t の列 c を参照する外部キー</td></tr>
+        <tr><td><code>CHECK (条件)</code></td><td>各行が条件を満たすことを要求</td></tr>
+        <tr><td><code>DEFAULT 値</code></td><td>値が指定されなかったときの既定値</td></tr>
+      </tbody>
+    </table></div>
+    <p>SQL の予約語（<code>CREATE</code> など）は大文字・小文字を区別しない。本資料では予約語を大文字で書く。文中の改行は空白と同じに扱われる。予約語・記号・空白は半角で書くこと（全角空白はエラーになる）。</p>
+    <p>library の students と books を自分で作る。</p>
+    <pre class="term" data-run="ch1">
+sqlite> CREATE TABLE students (
+   ...>   sid    TEXT    NOT NULL PRIMARY KEY,
+   ...>   name   TEXT    NOT NULL,
+   ...>   class  TEXT    NOT NULL,
+   ...>   number INTEGER NOT NULL,
+   ...>   UNIQUE (class, number)
+   ...> );
+sqlite> CREATE TABLE books (
+   ...>   bid   TEXT    NOT NULL PRIMARY KEY,
+   ...>   title TEXT    NOT NULL,
+   ...>   year  INTEGER,
+   ...>   pages INTEGER
+   ...> );
+    </pre>
+
+    <h3 data-short=".tables / .schema"><span class="sec-num">1.5</span>表の一覧と定義の確認</h3>
+    <pre class="term" data-run="ch1">
+sqlite> .tables
+sqlite> .schema books
+    </pre>
+    <p><code>.schema</code> を引数なしで実行すると、すべての表の定義、すなわちデータベースの設計図（スキーマ）を表示する。</p>
+
+    <h3 data-short="INSERT"><span class="sec-num">1.6</span>行の追加（INSERT）</h3>
+    <pre class="code">
+INSERT INTO table_name [(column, ...)] VALUES (value, ...) [, (value, ...) ...];
+    </pre>
+    <ul>
+      <li>列名の並びを省略すると、表定義の順にすべての列の値を与える。</li>
+      <li>列名を指定した場合、指定しなかった列は <code>DEFAULT</code> の値（なければ NULL）になる。</li>
+      <li>文字列は単一引用符 <code>'…'</code> で囲む。</li>
+      <li><code>VALUES</code> の後に <code>(…)</code> をカンマで並べると、複数行を一度に追加できる。</li>
+    </ul>
+    <pre class="term" data-run="ch1">
+sqlite> INSERT INTO students VALUES ('S01', '佐藤 花子', '1-A', 12);
+sqlite> INSERT INTO students (sid, name, class, number)
+   ...> VALUES ('S02', '鈴木 一郎', '1-A', 15), ('S03', '佐藤 花子', '1-B', 12);
+sqlite> INSERT INTO books VALUES ('B01', '坊っちゃん', 1906, 200);
+sqlite> INSERT INTO books (bid, title, year) VALUES ('B05', '羅生門', 1915);
+    </pre>
+    <p>最後の文では <code>pages</code> を指定していないので、B05 の <code>pages</code> は NULL になる。</p>
+    <h4>制約違反</h4>
+    <p>制約に反する行の追加は拒否される。</p>
+    <pre class="term" data-run="ch1">
+sqlite> INSERT INTO students VALUES ('S01', '山本 陽', '1-C', 1);
+sqlite> INSERT INTO students VALUES ('S07', '山本 陽', '1-A', 12);
+sqlite> INSERT INTO students (sid, name) VALUES ('S08', '山本 陽');
+    </pre>
+    <p>順に、主キー <code>sid</code> の重複、候補キー <code>(class, number)</code> の重複、<code>NOT NULL</code> 列 <code>class</code> の欠落である。エラーメッセージがどの制約に反したかを示していることを確認すること。</p>
+
+    <h3 data-short="SELECT"><span class="sec-num">1.7</span>行の検索（SELECT）</h3>
+    <pre class="code">
+SELECT column, ... FROM table_name [WHERE condition];
+    </pre>
+    <p><code>SELECT</code> の後に出力する列を書く（<code>*</code> はすべての列）。<code>WHERE</code> の条件を満たす行だけが出力される。関係代数の用語では、列を絞る操作を<strong>射影</strong>、行を絞る操作を<strong>選択</strong>という。</p>
+    <pre class="term" data-run="ch1">
+sqlite> SELECT * FROM students;
+sqlite> SELECT name, class FROM students;
+sqlite> SELECT * FROM students WHERE class = '1-A';
+sqlite> SELECT * FROM books;
+    </pre>
+
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 1-1</span>INSERT</div>
+      <div class="ex-body">
+        <p>students と books が <a href="#ch0-8">0.8</a> の表と同じ内容になるよう、足りない行を追加せよ。追加後に SELECT で確認すること。</p>
+      </div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="ch1">
+sqlite> INSERT INTO students VALUES
+   ...>   ('S04', '高橋 健', '1-B', 20), ('S05', '田中 美咲', '2-A', 15), ('S06', '伊藤 翔', '2-A', 3);
+sqlite> INSERT INTO books VALUES
+   ...>   ('B02', '吾輩は猫である', 1905, 480), ('B03', 'こころ', 1914, 320),
+   ...>   ('B04', '銀河鉄道の夜', 1934, 180), ('B06', 'データベースの基礎', 2020, 300);
+sqlite> SELECT * FROM books;
+        </pre>
+        <p class="small muted">出力の行の順序は追加した順に依存し、一般には保証されない。順序が必要なら <code>ORDER BY</code>（<a href="#ch3-2">3.2</a>）を使う。</p>
+      </details>
+    </div>
+
+    <h3 data-short="条件の書き方"><span class="sec-num">1.8</span>条件の書き方</h3>
+    <div class="table-wrap"><table class="plain">
+      <thead><tr><th>書き方</th><th>意味</th></tr></thead>
+      <tbody>
+        <tr><td><code>=</code> <code>&lt;&gt;</code> <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code></td><td>比較（<code>&lt;&gt;</code> は「等しくない」。<code>!=</code> も可）</td></tr>
+        <tr><td><code>AND</code> <code>OR</code> <code>NOT</code></td><td>論理積・論理和・否定</td></tr>
+        <tr><td><code>x BETWEEN a AND b</code></td><td><code>a &lt;= x AND x &lt;= b</code></td></tr>
+        <tr><td><code>x IN (v1, v2, …)</code></td><td><code>x = v1 OR x = v2 OR …</code></td></tr>
+        <tr><td><code>x LIKE 'パターン'</code></td><td>パターン一致。<code>%</code> は任意の0文字以上、<code>_</code> は任意の1文字</td></tr>
+        <tr><td><code>x IS NULL</code> / <code>x IS NOT NULL</code></td><td>NULL である／ない</td></tr>
+      </tbody>
+    </table></div>
+    <pre class="term" data-run="ch1">
+sqlite> SELECT title, year FROM books WHERE year &lt; 1910;
+sqlite> SELECT title, year FROM books WHERE year BETWEEN 1910 AND 1930;
+sqlite> SELECT * FROM students WHERE class IN ('1-A', '2-A') AND number &lt; 15;
+sqlite> SELECT * FROM students WHERE name LIKE '佐藤%';
+    </pre>
+
+    <h3 data-short="NULL と三値論理"><span class="sec-num">1.9</span>NULL の比較</h3>
+    <p>pages が NULL の本を探すつもりで <code>= NULL</code> と書くと、1行も出力されない。</p>
+    <pre class="term" data-run="ch1">
+sqlite> SELECT * FROM books WHERE pages = NULL;
+sqlite> SELECT * FROM books WHERE pages IS NULL;
+    </pre>
+    <div class="def">
+      <span class="def-title">定義 1.1（三値論理）</span>
+      <p>SQL の条件式は TRUE・FALSE に加えて <strong>UNKNOWN</strong> の値をとる。NULL を含む比較（<code>NULL = NULL</code> を含む）の結果は UNKNOWN である。<code>WHERE</code> は条件が <strong>TRUE</strong> の行だけを残す。</p>
+    </div>
+    <p>NULL は「値が未知」を表すので、「未知の値が NULL と等しいか」も未知である、と考えれば UNKNOWN になる理由が分かる。NULL かどうかの判定には、比較ではなく専用の <code>IS NULL</code> を使う。同様に、NULL を含む算術の結果も NULL になる（<a href="#ch1-10">1.10</a>）。</p>
+
+    <h3 data-short="UPDATE"><span class="sec-num">1.10</span>行の更新（UPDATE）</h3>
+    <pre class="code">
+UPDATE table_name SET column = value [, column = value ...] [WHERE condition];
+    </pre>
+    <div class="callout danger">
+      <span class="title">WHERE を省略すると全行が更新される</span>
+      UPDATE の対象行は WHERE で決まる。実行前に<strong>同じ WHERE で SELECT し、対象が意図どおりであることを確認する</strong>こと。
+    </div>
+    <pre class="term" data-run="ch1">
+sqlite> SELECT * FROM students WHERE sid = 'S04';
+sqlite> UPDATE students SET class = '1-C' WHERE sid = 'S04';
+sqlite> SELECT * FROM students WHERE sid = 'S04';
+    </pre>
+    <p>新しい値には、その行の現在の値を使った式を書ける。NULL を含む式の値は NULL になることに注意する。</p>
+    <pre class="term" data-run="ch1">
+sqlite> UPDATE books SET pages = pages + 10 WHERE year &lt; 1910;
+sqlite> UPDATE books SET pages = pages + 10 WHERE bid = 'B05';
+sqlite> SELECT bid, title, pages FROM books;
+    </pre>
+    <p>WHERE を省略した場合：</p>
+    <pre class="term" data-run="ch1">
+sqlite> UPDATE books SET year = 2000;
+sqlite> SELECT * FROM books;
+    </pre>
+
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 1-2</span>検索</div>
+      <div class="ex-body">
+        <p>次の SELECT 文を書け。上の操作で一部の値（S04 のクラス、year、pages）が変わっているので、出力が 0.8 の表と一致しなくてよい。</p>
+        <ol>
+          <li>クラス 1-B の生徒の氏名</li>
+          <li>ページ数が 300 以上の本の書名とページ数</li>
+          <li>ページ数が不明な本の書名</li>
+          <li>書名に「の」を含む本の書名</li>
+        </ol>
+      </div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="ch1">
+sqlite> SELECT name FROM students WHERE class = '1-B';
+sqlite> SELECT title, pages FROM books WHERE pages >= 300;
+sqlite> SELECT title FROM books WHERE pages IS NULL;
+sqlite> SELECT title FROM books WHERE title LIKE '%の%';
+        </pre>
+      </details>
+    </div>
+
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 1-3</span>UPDATE</div>
+      <div class="ex-body">
+        <p>UPDATE を用いて、students と books を <a href="#ch0-8">0.8</a> の表と同じ内容に戻せ。B05 の pages は NULL に戻すこと。</p>
+      </div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="ch1">
+sqlite> UPDATE students SET class = '1-B' WHERE sid = 'S04';
+sqlite> UPDATE books SET pages = pages - 10 WHERE bid IN ('B01', 'B02');
+sqlite> UPDATE books SET pages = NULL WHERE bid = 'B05';
+sqlite> UPDATE books SET year = 1906 WHERE bid = 'B01';
+sqlite> UPDATE books SET year = 1905 WHERE bid = 'B02';
+sqlite> UPDATE books SET year = 1914 WHERE bid = 'B03';
+sqlite> UPDATE books SET year = 1934 WHERE bid = 'B04';
+sqlite> UPDATE books SET year = 1915 WHERE bid = 'B05';
+sqlite> UPDATE books SET year = 2020 WHERE bid = 'B06';
+sqlite> SELECT * FROM books;
+        </pre>
+        <p class="small muted"><code>SET pages = NULL</code> の <code>=</code> は比較ではなく代入なので、NULL を書いてよい。</p>
+      </details>
+    </div>
+
+    <h3 class="adv" data-short="発展"><span class="sec-num">1.11</span>発展</h3>
+    <p class="adv-lead">ここから先は読まなくても次の章に進める。必要になったときに戻ってくればよい。</p>
+    <h4>SQLite の型チェックはゆるい</h4>
+    <p>SQLite の型は「列が優先して用いる型」（型親和性）であり、他の多くの RDBMS と異なり、型の合わない値を入れても拒否しない。例えば <code>INTEGER</code> 列に <code>'abc'</code> を入れられる。厳密に型を守らせたい場合は表定義の末尾に <code>STRICT</code> を付ける（3.37 以降）。</p>
+  </section>
+
+  <!-- ===================================================== CHAPTER 2 -->
+  <section class="chapter" id="ch2" data-num="2" data-short="削除・トランザクション・ビュー">
+    <div class="chapter-head"><div class="label">第2章</div><h2>削除・トランザクション・ビュー</h2>
+      <p class="chapter-sub">library の作成、参照整合性、バックアップと復元、削除（DELETE）、トランザクション、ビュー</p></div>
+
+    <h3 data-short="library の作成"><span class="sec-num">2.1</span>library データベースの作成</h3>
+    <p>以降は library を使う。作成用の SQL 文 <a href="data/library.sql" download>library.sql</a> をダウンロードして <code>~/sql-practice</code> に置き、次を実行する。<code>&lt;</code> はファイルの内容を sqlite3 への入力として与える（リダイレクト）。</p>
+    <pre class="term">
+% cd ~/sql-practice
+% sqlite3 library.db &lt; library.sql
+% sqlite3 library.db
+    </pre>
+    <p>ダウンロードできない場合は、<code>sqlite3 library.db</code> を起動し、下の内容をコピーして貼り付けてもよい。library.sql は何度実行しても初期状態に戻るよう書いてあるので、データを壊したときもこの手順で作り直せる。</p>
+    <details class="fold"><summary>library.sql の内容</summary>
+      <pre class="code" data-label="library.sql"><!--LIBRARY_SQL_PRE--></pre>
+    </details>
+    <pre class="term" data-run="lib" data-reset="library">
+sqlite> .tables
+    </pre>
+
+    <h3 data-short="外部キー制約を有効にする"><span class="sec-num">2.2</span>外部キー制約を有効にする</h3>
+    <p><a href="#ch0-4">0.4</a> で述べたとおり、SQLite は既定で外部キーを検査しない。<code>PRAGMA foreign_keys;</code> で現在の設定を確認できる（0 が無効）。無効のままでは、存在しない生徒 S99 への貸出が登録できてしまう。</p>
+    <pre class="term" data-run="lib" data-fk="off">
+sqlite> PRAGMA foreign_keys;
+sqlite> INSERT INTO loans VALUES (9, 'S99', 'B01', '2026-06-01', NULL);
+sqlite> SELECT * FROM loans WHERE lid = 9;
+sqlite> DELETE FROM loans WHERE lid = 9;
+    </pre>
+    <p>有効にすると、参照整合性制約（定義 0.3）に反する追加と削除が拒否される。</p>
+    <pre class="term" data-run="lib">
+sqlite> PRAGMA foreign_keys = ON;
+sqlite> PRAGMA foreign_keys;
+sqlite> INSERT INTO loans VALUES (9, 'S99', 'B01', '2026-06-01', NULL);
+sqlite> DELETE FROM students WHERE sid = 'S01';
+    </pre>
+    <p>この設定は接続ごと（sqlite3 を起動するたび）に必要である。毎回有効にするため <code>~/.sqliterc</code> に追記しておく。</p>
+    <pre class="term">
+% echo 'PRAGMA foreign_keys = ON;' >> ~/.sqliterc
+    </pre>
+
+    <h3 data-short="バックアップ"><span class="sec-num">2.3</span>バックアップ</h3>
+    <p>削除の練習に入る前にバックアップを取る。SQLite のデータベースは1つのファイルなので、sqlite3 を終了した状態でファイルを複製すればよい。<code>YYYYMMDD</code> は今日の日付に置き換える。</p>
+    <pre class="term">
+% cp library.db library.db.YYYYMMDD
+    </pre>
+    <h3 data-short="DELETE"><span class="sec-num">2.4</span>行の削除（DELETE）</h3>
+    <pre class="code">
+DELETE FROM table_name [WHERE condition];
+    </pre>
+    <div class="callout danger">
+      <span class="title">WHERE を省略すると全行が削除される</span>
+      SQL に「元に戻す」はない（ただし BEGIN で始めたトランザクションの中なら ROLLBACK で取り消せる：<a href="#ch2-6">2.6</a>）。UPDATE と同様、先に同じ WHERE で SELECT して対象を確認する。
+    </div>
+    <p>4月中に返却済みの貸出記録を削除する。</p>
+    <pre class="term" data-run="lib">
+sqlite> SELECT * FROM loans WHERE return_date &lt; '2026-05-01';
+sqlite> DELETE FROM loans WHERE return_date &lt; '2026-05-01';
+sqlite> SELECT * FROM loans;
+    </pre>
+    <p>返却日が NULL の行（貸出中）は、<code>NULL &lt; '2026-05-01'</code> が UNKNOWN なので削除されていない（定義 1.1）。次に WHERE を付け忘れた場合：</p>
+    <pre class="term" data-run="lib">
+sqlite> DELETE FROM loans;
+sqlite> SELECT COUNT(*) FROM loans;
+    </pre>
+
+    <h3 data-short="復元"><span class="sec-num">2.5</span>復元</h3>
+    <p>バックアップから元の状態に戻すことを<strong>復元</strong>（リストア）という。</p>
+    <pre class="term" data-run="lib" data-reset="library">
+sqlite> .quit
+% cp library.db.YYYYMMDD library.db
+% sqlite3 library.db
+sqlite> SELECT COUNT(*) FROM loans;
+    </pre>
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 2-1</span>DELETE</div>
+      <div class="ex-body">
+        <p>生徒 S05 の貸出記録をすべて削除せよ。削除の前に、同じ条件の SELECT で対象を確認すること。終わったら library.db を復元しておく。</p>
+      </div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="lib" data-reset="library">
+sqlite> SELECT * FROM loans WHERE sid = 'S05';
+sqlite> DELETE FROM loans WHERE sid = 'S05';
+sqlite> SELECT * FROM loans WHERE sid = 'S05';
+        </pre>
+        <p class="small muted">生徒 S05 自身（students の行）を削除する場合は、先に S05 を参照する loans の行を削除しなければならない（外部キー制約）。</p>
+      </details>
+    </div>
+
+    <h3 data-short="トランザクション"><span class="sec-num">2.6</span>トランザクション（BEGIN / COMMIT / ROLLBACK）</h3>
+    <p><a href="#ch0-7">0.7</a> のトランザクションを実際に使う。</p>
+    <pre class="code">
+BEGIN;      -- トランザクションを開始する
+  …         -- INSERT / UPDATE / DELETE など
+COMMIT;     -- 確定する（ここで初めて変更が確定する）
+ROLLBACK;   -- COMMIT の代わりに実行すると、BEGIN の前の状態に戻る
+    </pre>
+    <h4>まとめて確定する</h4>
+    <p>「S01 が坊っちゃん（B01）を返し、その場で S02 が借りる」を1つのトランザクションにする。</p>
+    <pre class="term" data-run="lib" data-reset="library" data-tx="1">
+sqlite> BEGIN;
+sqlite> UPDATE loans SET return_date = '2026-05-20' WHERE lid = 8;
+sqlite> INSERT INTO loans VALUES (9, 'S02', 'B01', '2026-05-20', NULL);
+sqlite> COMMIT;
+sqlite> SELECT * FROM loans WHERE bid = 'B01';
+    </pre>
+    <h4>取り消す</h4>
+    <p>BEGIN の後なら、<code>WHERE</code> を付け忘れた DELETE も <code>ROLLBACK</code> で元に戻せる。危ない操作は、BEGIN してから実行し、結果を SELECT で確かめてから COMMIT する習慣をつけるとよい。</p>
+    <pre class="term" data-run="lib" data-tx="1">
+sqlite> BEGIN;
+sqlite> DELETE FROM loans;
+sqlite> SELECT COUNT(*) FROM loans;
+sqlite> ROLLBACK;
+sqlite> SELECT COUNT(*) FROM loans;
+    </pre>
+    <h4>途中でエラーが出たら</h4>
+    <p>次の例では、返却の UPDATE は成功したが、次の INSERT が外部キー制約に反して失敗した（S99 は存在しない）。</p>
+    <pre class="term" data-run="lib" data-tx="1">
+sqlite> BEGIN;
+sqlite> UPDATE loans SET return_date = '2026-05-21' WHERE lid = 9;
+sqlite> INSERT INTO loans VALUES (10, 'S99', 'B01', '2026-05-21', NULL);
+sqlite> ROLLBACK;
+sqlite> SELECT lid, return_date FROM loans WHERE lid = 9;
+    </pre>
+    <div class="callout warn"><span class="title">エラーが出ても自動では取り消されない</span>SQLite では、トランザクションの途中で1つの文が失敗しても、それまでに成功した文（上の UPDATE）は取り消されずに残る。ここで COMMIT すると「返却だけ記録された」状態が確定してしまう。エラーが出たら <code>ROLLBACK</code> すること。なお、COMMIT せずに sqlite3 を終了した場合も、そのトランザクションは取り消される。</div>
+    <p class="sub">BEGIN を書かずに実行した文は、1文ずつが自動的に1つのトランザクションとして確定している（自動コミット）。1つの UPDATE が途中までしか反映されない、ということは起きない。</p>
+
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 2-2</span>トランザクション</div>
+      <div class="ex-body">
+        <p>「S03 が こころ（B03）を 2026-05-22 に返却し、同じ日に S06 が B03 を借りる」を1つのトランザクションで記録せよ。新しい貸出の lid は 10 とする。最後に B03 の貸出記録を確認すること。</p>
+      </div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="lib" data-tx="1">
+sqlite> BEGIN;
+sqlite> UPDATE loans SET return_date = '2026-05-22' WHERE lid = 3;
+sqlite> INSERT INTO loans VALUES (10, 'S06', 'B03', '2026-05-22', NULL);
+sqlite> COMMIT;
+sqlite> SELECT * FROM loans WHERE bid = 'B03';
+        </pre>
+      </details>
+    </div>
+
+    <h3 data-short="CREATE VIEW"><span class="sec-num">2.7</span>ビュー（CREATE VIEW）</h3>
+    <div class="def">
+      <span class="def-title">定義 2.1（ビュー）<span class="en">view</span></span>
+      <p>SELECT 文に名前を付けて保存し、表と同じように参照できるようにしたものをビューという。ビューはデータを保持せず、参照されるたびに保存された SELECT 文が実行される。</p>
+    </div>
+    <p>CREATE TABLE で作った、実際にデータを保持する表を（ビューと区別して）<strong>実表</strong>という。ビューを使うと、複雑な問合せを名前で再利用でき、利用者に見せる列や行を限定できる。</p>
+    <pre class="code">
+CREATE VIEW view_name [(column, ...)] AS select_statement;
+    </pre>
+    <pre class="term" data-run="lib" data-reset="library">
+sqlite> CREATE VIEW on_loan AS SELECT lid, sid, bid, loan_date FROM loans WHERE return_date IS NULL;
+sqlite> CREATE VIEW long_books AS SELECT bid, title, pages FROM books WHERE pages >= 300;
+sqlite> .tables
+sqlite> SELECT * FROM on_loan;
+sqlite> SELECT * FROM long_books;
+    </pre>
+    <p>ビューは参照のたびに計算されるので、元の表を変えれば結果も変わる。</p>
+    <pre class="term" data-run="lib">
+sqlite> UPDATE loans SET return_date = '2026-05-20' WHERE lid = 8;
+sqlite> SELECT * FROM on_loan;
+sqlite> UPDATE loans SET return_date = NULL WHERE lid = 8;
+    </pre>
+
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 2-3</span>CREATE VIEW</div>
+      <div class="ex-body"><p>1 年生（クラスが <code>1-</code> で始まる）の生徒だけを含むビュー <code>first_graders</code> を作れ。</p></div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="lib">
+sqlite> CREATE VIEW first_graders AS SELECT * FROM students WHERE class LIKE '1-%';
+sqlite> SELECT * FROM first_graders;
+        </pre>
+      </details>
+    </div>
+
+
+    <h3 class="adv" data-short="発展"><span class="sec-num">2.8</span>発展</h3>
+    <p class="adv-lead">ここから先は読まなくても次の章に進める。必要になったときに戻ってくればよい。</p>
+    <h4>ダンプ（SQL 文として書き出す）</h4>
+    <p>データベースを再構築する SQL 文として書き出すことを<strong>ダンプ</strong>という。テキストなので中身を読め、他の RDBMS への移行にも使える。</p>
+    <pre class="term">
+% sqlite3 library.db .dump > library_YYYYMMDD.sql
+% head -n 4 library_YYYYMMDD.sql
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+CREATE TABLE students (
+  sid    TEXT    NOT NULL PRIMARY KEY,
+    </pre>
+    <p class="small muted">sqlite3 の中で <code>.output ファイル名</code> → <code>.dump</code> → <code>.output</code> としても同じである。</p>
+
+    <p>ダンプから復元するには、新しいファイルに流し込む。</p>
+    <pre class="term">
+% sqlite3 restored.db &lt; library_YYYYMMDD.sql
+% sqlite3 restored.db 'SELECT COUNT(*) FROM loans;'
+COUNT(*)
+8
+    </pre>
+
+    <h4>表とビューの削除（DROP）</h4>
+    <pre class="code">
+DROP VIEW [IF EXISTS] view_name;
+DROP TABLE [IF EXISTS] table_name;
+    </pre>
+    <p>DELETE が行を消すのに対し、DROP は表やビューそのもの（スキーマごと）を消す。</p>
+    <pre class="term" data-run="lib">
+sqlite> DROP VIEW long_books;
+sqlite> .tables
+    </pre>
+    <p>ビューは SELECT 文を保存しているだけなので、参照している表を削除するとビューは使えなくなる。練習用の表で確かめる。</p>
+    <pre class="term" data-run="lib">
+sqlite> CREATE TABLE memo (id INTEGER PRIMARY KEY, body TEXT);
+sqlite> CREATE VIEW memo_view AS SELECT body FROM memo;
+sqlite> DROP TABLE memo;
+sqlite> SELECT * FROM memo_view;
+sqlite> DROP VIEW memo_view;
+    </pre>
+
+    <h4>表定義の変更（ALTER TABLE）</h4>
+    <pre class="code">
+ALTER TABLE books RENAME TO library_books;        -- 表の名前を変更
+ALTER TABLE students ADD COLUMN email TEXT;       -- 列を追加（既存行の値は NULL）
+ALTER TABLE students RENAME COLUMN name TO full_name;  -- 列の名前を変更
+ALTER TABLE students DROP COLUMN email;           -- 列を削除（3.35 以降）
+    </pre>
+    <p>SQLite の ALTER TABLE でできるのは上の4種類だけで、既存の列の型や制約は変更できない。その場合は新しい定義で表を作り直し、<code>INSERT INTO 新表 SELECT … FROM 旧表;</code> でデータを移す。</p>
+  </section>
+
+  <!-- ===================================================== CHAPTER 3 -->
+  <section class="chapter" id="ch3" data-num="3" data-short="集合演算と結合">
+    <div class="chapter-head"><div class="label">第3章</div><h2>問合せ（1）：並べ替え・集合演算・結合</h2>
+      <p class="chapter-sub">SELECT 文の構造、DISTINCT / ORDER BY / LIMIT、UNION / INTERSECT / EXCEPT、直積、内部結合、外部結合</p></div>
+
+    <p>この章と次の章では、初期状態の library.db を使う（壊した場合は <a href="#ch2-1">2.1</a> の手順で作り直す）。</p>
+
+    <h3 data-short="SELECT の構造"><span class="sec-num">3.1</span>SELECT 文の構造</h3>
+    <pre class="code">
+SELECT [DISTINCT] column_list    -- 5. 出力する列を計算する（重複を除く）
+FROM table [JOIN table ON cond]  -- 1. 対象の表を作る（結合）
+[WHERE condition]                -- 2. 行を選ぶ
+[GROUP BY column, ...]           -- 3. 行をグループにまとめる
+[HAVING condition]               -- 4. グループを選ぶ
+[ORDER BY column [ASC|DESC]]     -- 6. 並べ替える
+[LIMIT n [OFFSET m]];            -- 7. 先頭の n 行を取る
+    </pre>
+    <p>句は上の順に書く。右の番号は、結果を論理的に計算する順序である。書く順と計算の順が異なるので、例えば <code>SELECT</code> で付けた別名は（計算順で先の）<code>WHERE</code> では原則使えない。</p>
+
+    <h3 data-short="DISTINCT / ORDER BY / LIMIT"><span class="sec-num">3.2</span>重複の除去・並べ替え・件数の制限</h3>
+    <p><code>DISTINCT</code> は結果から重複行を除く（SQL のテーブルには同じ内容の行が複数ありうる）。</p>
+    <pre class="term" data-run="lib3" data-reset="library">
+sqlite> SELECT sid FROM loans;
+sqlite> SELECT DISTINCT sid FROM loans;
+    </pre>
+    <p><code>ORDER BY</code> は指定した列で並べ替える。<code>ASC</code>（昇順、省略時）と <code>DESC</code>（降順）があり、複数の列を指定すると前の列が等しい行どうしを次の列で並べる。<code>ORDER BY</code> がない場合、行の順序は保証されない。</p>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT title, year FROM books ORDER BY year DESC;
+sqlite> SELECT sid, loan_date FROM loans ORDER BY sid, loan_date DESC;
+    </pre>
+    <p><code>LIMIT n</code> は先頭の n 行だけを返す。並べ替えと組み合わせて「上位 n 件」を得る。</p>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT title, pages FROM books ORDER BY pages DESC LIMIT 3;
+sqlite> SELECT title, pages FROM books ORDER BY pages;
+    </pre>
+    <p class="small muted">SQLite では、昇順の並べ替えで NULL は最小の値として先頭に来る。この扱いは RDBMS によって異なる。</p>
+
+    <h3 data-short="内部結合"><span class="sec-num">3.3</span>内部結合（INNER JOIN）</h3>
+    <div class="def">
+      <span class="def-title">定義 3.1（内部結合）</span>
+      <p class="gist">2つの表の行の組み合わせ（直積）のうち、<strong>結合条件を満たす組み合わせだけ</strong>を残した表。</p><p>例えば「貸出の sid = 生徒の sid」という条件で結合すると、各貸出記録にその貸出をした生徒の行がくっつく。</p>
+    </div>
+    <p>貸出記録に生徒の氏名を付ける。次の3つは同じ結合を表す（3つ目は列 <code>sid</code> が1つにまとまる）。<code>loans AS l</code> は表に別名 <code>l</code> を付ける書き方で、<code>l.sid</code> は「l の列 sid」を表す。</p>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT l.lid, l.sid, s.name FROM loans AS l, students AS s WHERE l.sid = s.sid;
+sqlite> SELECT l.lid, l.sid, s.name FROM loans AS l JOIN students AS s ON l.sid = s.sid;
+sqlite> SELECT lid, sid, name FROM loans JOIN students USING (sid);
+    </pre>
+    <ul>
+      <li>1つ目は直積と WHERE による書き方（定義 3.1 そのもの）。</li>
+      <li>2つ目は <code>JOIN … ON 条件</code>。結合条件と、行を絞る WHERE を分けて書けるので読みやすい。<code>INNER JOIN</code> と書いても同じ。</li>
+      <li>3つ目の <code>USING (列)</code> は「同名の列が等しい」という条件の略記で、その列は結果に1つだけ現れる（関係代数の自然結合に相当）。</li>
+    </ul>
+    <p>3つ以上の表も続けて結合できる。貸出記録に氏名と書名を付ける。</p>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT lid, name, title, loan_date, return_date
+   ...> FROM loans JOIN students USING (sid) JOIN books USING (bid);
+    </pre>
+    <p>M&nbsp;対&nbsp;N の関連は、中間テーブルを介した2回の結合で辿る（性質 0.2）。各本の著者名を出す。</p>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT b.title, a.name
+   ...> FROM books AS b
+   ...>   JOIN book_authors AS ba ON b.bid = ba.bid
+   ...>   JOIN authors AS a ON ba.aid = a.aid;
+    </pre>
+
+    <h3 data-short="外部結合"><span class="sec-num">3.4</span>外部結合（OUTER JOIN）</h3>
+    <p>内部結合では、結合条件を満たす相手のない行は結果から消える。上の著者名の結果に森鷗外（A06）が現れないのはこのためである。同様に、一度も本を借りていない生徒 S06 は、生徒と貸出の内部結合に現れない。</p>
+    <div class="def">
+      <span class="def-title">定義 3.2（外部結合）</span>
+      <p class="gist"><code>A LEFT JOIN B</code> は、内部結合の結果に、<strong>相手が見つからなかった A の行も残す</strong>結合である。残した行の B 側の列は NULL で埋める。</p><p><code>RIGHT OUTER JOIN</code> は左右を入れ替えたもの、<code>FULL OUTER JOIN</code> は両側について加えたもの（LEFT と RIGHT の和集合）である。<code>OUTER</code> は省略できる。</p>
+    </div>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT s.sid, s.name, l.lid, l.bid
+   ...> FROM students AS s JOIN loans AS l ON s.sid = l.sid;
+sqlite> SELECT s.sid, s.name, l.lid, l.bid
+   ...> FROM students AS s LEFT JOIN loans AS l ON s.sid = l.sid;
+    </pre>
+    <p>LEFT JOIN の結果では、S06 が loans の列を NULL として現れる。これを利用すると「相手のない行」だけを取り出せる。</p>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT s.sid, s.name
+   ...> FROM students AS s LEFT JOIN loans AS l ON s.sid = l.sid
+   ...> WHERE l.lid IS NULL;
+    </pre>
+
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 3-1</span>外部結合</div>
+      <div class="ex-body"><p>一度も貸し出されていない本の bid と書名を、LEFT JOIN を用いて求めよ。</p></div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="lib3">
+sqlite> SELECT b.bid, b.title
+   ...> FROM books AS b LEFT JOIN loans AS l ON b.bid = l.bid
+   ...> WHERE l.lid IS NULL;
+        </pre>
+      </details>
+    </div>
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 3-2</span>4つの表の結合</div>
+      <div class="ex-body"><p>夏目漱石の本を借りたことのある生徒の sid と氏名を、重複なく求めよ。</p></div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="lib3">
+sqlite> SELECT DISTINCT s.sid, s.name
+   ...> FROM students AS s
+   ...>   JOIN loans AS l         ON s.sid = l.sid
+   ...>   JOIN book_authors AS ba ON l.bid = ba.bid
+   ...>   JOIN authors AS a       ON ba.aid = a.aid
+   ...> WHERE a.name = '夏目漱石';
+        </pre>
+        <p class="small">DISTINCT を氏名だけに適用する（<code>SELECT DISTINCT s.name</code>）と、別人の S01 と S03（ともに佐藤 花子）が1行にまとまってしまう。重複を除く単位はキー（sid）を含めて考える。</p>
+      </details>
+    </div>
+
+    <h3 class="adv" data-short="発展"><span class="sec-num">3.5</span>発展</h3>
+    <p class="adv-lead">ここから先は読まなくても次の章に進める。必要になったときに戻ってくればよい。</p>
+    <h4>集合演算（UNION / INTERSECT / EXCEPT）</h4>
+    <p>列の数が等しい2つの SELECT の結果を、集合として組み合わせる。結果から重複は除かれる（<code>UNION ALL</code> は除かない）。</p>
+    <div class="table-wrap"><table class="plain">
+      <thead><tr><th>演算</th><th>結果</th></tr></thead>
+      <tbody>
+        <tr><td><code>Q1 UNION Q2</code></td><td>和集合 <span class="math">Q<sub>1</sub> ∪ Q<sub>2</sub></span></td></tr>
+        <tr><td><code>Q1 INTERSECT Q2</code></td><td>積集合 <span class="math">Q<sub>1</sub> ∩ Q<sub>2</sub></span></td></tr>
+        <tr><td><code>Q1 EXCEPT Q2</code></td><td>差集合 <span class="math">Q<sub>1</sub> ∖ Q<sub>2</sub></span>（順序を入れ替えると結果が変わる）</td></tr>
+      </tbody>
+    </table></div>
+    <p>生徒 S01 と S05 が借りた本で確かめる。</p>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT bid FROM loans WHERE sid = 'S01';
+sqlite> SELECT bid FROM loans WHERE sid = 'S05';
+    </pre>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT bid FROM loans WHERE sid = 'S01'
+   ...> UNION
+   ...> SELECT bid FROM loans WHERE sid = 'S05';
+sqlite> SELECT bid FROM loans WHERE sid = 'S01'
+   ...> UNION ALL
+   ...> SELECT bid FROM loans WHERE sid = 'S05';
+sqlite> SELECT bid FROM loans WHERE sid = 'S01'
+   ...> INTERSECT
+   ...> SELECT bid FROM loans WHERE sid = 'S05';
+sqlite> SELECT bid FROM loans WHERE sid = 'S01'
+   ...> EXCEPT
+   ...> SELECT bid FROM loans WHERE sid = 'S05';
+sqlite> SELECT bid FROM loans WHERE sid = 'S05'
+   ...> EXCEPT
+   ...> SELECT bid FROM loans WHERE sid = 'S01';
+    </pre>
+
+    <p>演習 3-1 は EXCEPT でも書ける（全部の本から、貸し出されたことのある本を引く）。</p>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT bid, title FROM books
+   ...> EXCEPT
+   ...> SELECT bid, title FROM books JOIN loans USING (bid);
+    </pre>
+    <h4>直積</h4>
+    <p><code>FROM</code> に複数の表をカンマで並べると、各表の行のすべての組合せ（<strong>直積</strong>）が対象になる。students（6行）と books（6行）の直積は 36 行である。<code>CROSS JOIN</code> と書いても同じである。</p>
+    <pre class="term" data-run="lib3" data-max="5">
+sqlite> SELECT COUNT(*) FROM students, books;
+sqlite> SELECT students.name, books.title FROM students CROSS JOIN books;
+    </pre>
+    <p>直積の大半の行は意味を持たない組合せである。意味のある組合せ（例えば貸出記録に対応するもの）だけを取り出すのが結合である。</p>
+
+    <h4>RIGHT JOIN と FULL JOIN</h4>
+    <p>RIGHT JOIN は左右を入れ替えた LEFT JOIN と同じ結果を与える。FULL JOIN は、例えば著者と著者対応の結合で、どちらにも相手のない行を残す（ここでは外部キー制約により book_authors 側に孤立した行はないので、LEFT JOIN と同じ行になる）。</p>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT a.aid, a.name, ba.bid
+   ...> FROM book_authors AS ba RIGHT JOIN authors AS a ON ba.aid = a.aid;
+sqlite> SELECT a.aid, a.name, ba.bid
+   ...> FROM authors AS a FULL JOIN book_authors AS ba ON a.aid = ba.aid;
+    </pre>
+    <h4>外部結合の条件を ON に書くか WHERE に書くか</h4>
+    <p>外部結合では、ON の条件は「どの行を相手として結合するか」を決め、WHERE の条件は「結合と NULL の補完が済んだ後の行を選ぶ」。両者は同じではない。「全生徒について、貸出中の貸出だけを結合する」なら、条件は ON に書く。</p>
+    <pre class="term" data-run="lib3">
+sqlite> SELECT s.sid, l.lid FROM students AS s LEFT JOIN loans AS l
+   ...>   ON s.sid = l.sid AND l.return_date IS NULL;
+sqlite> SELECT s.sid, l.lid FROM students AS s LEFT JOIN loans AS l
+   ...>   ON s.sid = l.sid WHERE l.return_date IS NULL;
+    </pre>
+    <p class="small muted">1つ目では、貸出中の本がない S02・S05・S06 が lid = NULL として残る。2つ目では、S02・S05 の行（返却済みの貸出と結合された行）が WHERE で除かれて消える。S06 が残るのは、結合で補われた NULL が <code>IS NULL</code> を満たすためで、意図した理由によるものではない。</p>
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 3-3</span>FULL JOIN の書き換え</div>
+      <div class="ex-body"><p>RIGHT JOIN と FULL JOIN をサポートしない RDBMS（SQLite 3.39 未満など）でも同じ結果が得られるよう、<code>authors FULL JOIN book_authors</code>（上の例）を LEFT JOIN と集合演算で書き換えよ。</p></div>
+      <details class="answer"><summary>解答例</summary>
+        <p>FULL JOIN は「左を残す LEFT JOIN」と「右を残す LEFT JOIN（左右を入れ替えたもの）」の和集合である。列の順序をそろえる。</p>
+        <pre class="term" data-run="lib3">
+sqlite> SELECT a.aid, a.name, ba.bid FROM authors AS a LEFT JOIN book_authors AS ba ON a.aid = ba.aid
+   ...> UNION
+   ...> SELECT a.aid, a.name, ba.bid FROM book_authors AS ba LEFT JOIN authors AS a ON a.aid = ba.aid;
+        </pre>
+      </details>
+    </div>
+  </section>
+
+  <!-- ===================================================== CHAPTER 4 -->
+  <section class="chapter" id="ch4" data-num="4" data-short="集約・副問合せ・ビュー">
+    <div class="chapter-head"><div class="label">第4章</div><h2>問合せ（2）：集約・副問合せ・ビュー</h2>
+      <p class="chapter-sub">集約関数、GROUP BY / HAVING、副問合せ、ビューの活用</p></div>
+
+    <h3 data-short="集約関数"><span class="sec-num">4.1</span>集約関数</h3>
+    <p>複数の行の値から1つの値を計算する関数を<strong>集約関数</strong>という。<code>COUNT(*)</code> 以外の集約関数は <strong>NULL を無視する</strong>。</p>
+    <div class="table-wrap"><table class="plain">
+      <thead><tr><th>関数</th><th>値</th></tr></thead>
+      <tbody>
+        <tr><td><code>COUNT(*)</code></td><td>行数</td></tr>
+        <tr><td><code>COUNT(x)</code> / <code>COUNT(DISTINCT x)</code></td><td>x が NULL でない行の数 / x の異なる値の数</td></tr>
+        <tr><td><code>SUM(x)</code> <code>AVG(x)</code></td><td>合計・平均</td></tr>
+        <tr><td><code>MAX(x)</code> <code>MIN(x)</code></td><td>最大値・最小値</td></tr>
+      </tbody>
+    </table></div>
+    <pre class="term" data-run="lib4" data-reset="library">
+sqlite> SELECT COUNT(*), COUNT(return_date), COUNT(DISTINCT sid) FROM loans;
+sqlite> SELECT COUNT(*), COUNT(pages), SUM(pages), AVG(pages), MAX(pages), MIN(pages) FROM books;
+sqlite> SELECT SUM(pages) / COUNT(*) FROM books;
+    </pre>
+    <p>AVG(pages) は NULL を除いた5冊の平均 1480 / 5 = 296 である。最後の式は NULL の本も分母に数えたうえ、整数どうしの除算なので小数部が切り捨てられる（1480 / 6 = 246.67 → 246）。<code>AS</code> で結果の列に名前を付けられる。</p>
+    <h3 data-short="GROUP BY / HAVING"><span class="sec-num">4.2</span>グループごとの集約（GROUP BY / HAVING）</h3>
+    <p><code>GROUP BY 列</code> は、その列の値が等しい行を1つのグループにまとめ、集約関数をグループごとに計算する。</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT sid, COUNT(*) AS n FROM loans GROUP BY sid;
+    </pre>
+    <p><code>HAVING</code> はグループに対する条件である。WHERE が<strong>集約の前に行を</strong>選ぶのに対し、HAVING は<strong>集約の後にグループを</strong>選ぶ（3.1 の計算順序）。</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT sid, COUNT(*) AS n FROM loans GROUP BY sid HAVING COUNT(*) >= 2;
+sqlite> SELECT sid, COUNT(*) AS n FROM loans WHERE return_date IS NULL GROUP BY sid;
+    </pre>
+    <p>結合と組み合わせる。本ごとの貸出回数を、一度も貸し出されていない本も 0 として求めるには、LEFT JOIN と <code>COUNT(l.lid)</code>（NULL を数えない）を使う。<code>COUNT(*)</code> では補われた行も数えて 1 になってしまう。</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT b.bid, b.title, COUNT(l.lid) AS times, COUNT(*) AS wrong
+   ...> FROM books AS b LEFT JOIN loans AS l ON b.bid = l.bid
+   ...> GROUP BY b.bid ORDER BY times DESC, b.bid;
+    </pre>
+    <p>中間テーブルを介して、本ごとの著者をまとめる。<code>GROUP_CONCAT(x, 区切り)</code> はグループ内の値を連結する SQLite の集約関数である。</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT b.title, COUNT(*) AS n_authors, GROUP_CONCAT(a.name, '・') AS authors
+   ...> FROM books AS b JOIN book_authors USING (bid) JOIN authors AS a USING (aid)
+   ...> GROUP BY b.bid;
+    </pre>
+
+    <h3 data-short="副問合せ"><span class="sec-num">4.3</span>副問合せ</h3>
+    <p>SELECT 文の中に括弧で囲んで書いた SELECT 文を<strong>副問合せ</strong>という。</p>
+    <h4>値を返す副問合せ</h4>
+    <p>結果が1行1列の副問合せは、値として比較に使える。平均よりページ数の多い本：</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT title, pages FROM books
+   ...> WHERE pages > (SELECT AVG(pages) FROM books);
+    </pre>
+    <h4>IN / NOT IN</h4>
+    <p><code>x IN (副問合せ)</code> は、x が副問合せの結果の列に含まれるとき真になる。現在本を借りている生徒と、一度も借りたことのない生徒：</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT sid, name FROM students
+   ...> WHERE sid IN (SELECT sid FROM loans WHERE return_date IS NULL);
+sqlite> SELECT sid, name FROM students
+   ...> WHERE sid NOT IN (SELECT sid FROM loans);
+    </pre>
+    <h4>EXISTS / NOT EXISTS</h4>
+    <p><code>EXISTS (副問合せ)</code> は、副問合せの結果が1行以上あるとき真になる。次の副問合せは外側の行 <code>s</code> を参照しており、<code>s</code> の各行について評価される（<strong>相関副問合せ</strong>）。</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT sid, name FROM students AS s
+   ...> WHERE NOT EXISTS (SELECT * FROM loans AS l WHERE l.sid = s.sid);
+    </pre>
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 4-1</span>副問合せ</div>
+      <div class="ex-body">
+        <ol>
+          <li>ページ数が最大の本の書名とページ数を求めよ。</li>
+          <li>宮沢賢治の本を一度も借りたことのない生徒の sid と氏名を求めよ。</li>
+        </ol>
+      </div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="lib4">
+sqlite> SELECT title, pages FROM books
+   ...> WHERE pages = (SELECT MAX(pages) FROM books);
+sqlite> SELECT sid, name FROM students
+   ...> WHERE sid NOT IN (
+   ...>   SELECT l.sid FROM loans AS l
+   ...>     JOIN book_authors AS ba ON l.bid = ba.bid
+   ...>     JOIN authors AS a ON ba.aid = a.aid
+   ...>   WHERE a.name = '宮沢賢治');
+        </pre>
+        <p class="small muted">2 では副問合せの <code>l.sid</code> が NOT NULL 制約を持つので、NOT IN の NULL の問題は起きない。</p>
+      </details>
+    </div>
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 4-2</span>GROUP BY</div>
+      <div class="ex-body"><p>著者ごとの著書数を、著書のない著者は 0 として、著書数の多い順に求めよ。</p></div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="lib4">
+sqlite> SELECT a.aid, a.name, COUNT(ba.bid) AS n_books
+   ...> FROM authors AS a LEFT JOIN book_authors AS ba ON a.aid = ba.aid
+   ...> GROUP BY a.aid ORDER BY n_books DESC, a.aid;
+        </pre>
+      </details>
+    </div>
+
+    <h3 data-short="ビューの活用"><span class="sec-num">4.4</span>ビューの活用</h3>
+    <p>結合や集約を含む問合せをビューにすると、以後は表と同じように使える。貸出中の本の一覧と、生徒ごとの貸出回数（0 回を含む）：</p>
+    <pre class="term" data-run="lib4">
+sqlite> CREATE VIEW on_loan_detail AS
+   ...> SELECT l.lid, s.sid, s.name, b.title, l.loan_date
+   ...> FROM loans AS l JOIN students AS s ON l.sid = s.sid JOIN books AS b ON l.bid = b.bid
+   ...> WHERE l.return_date IS NULL;
+sqlite> CREATE VIEW loan_counts AS
+   ...> SELECT s.sid, s.name, COUNT(l.lid) AS n
+   ...> FROM students AS s LEFT JOIN loans AS l ON s.sid = l.sid
+   ...> GROUP BY s.sid;
+sqlite> SELECT * FROM on_loan_detail;
+sqlite> SELECT * FROM loan_counts WHERE n = 0;
+    </pre>
+
+    <h3 class="adv" data-short="発展"><span class="sec-num">4.5</span>発展</h3>
+    <p class="adv-lead">ここから先は読まなくても次の章に進める。必要になったときに戻ってくればよい。</p>
+    <h4>分散</h4>
+    <p>SQLite には標準偏差・分散の関数がない。分散は「2乗の平均 − 平均の2乗」（<span class="math">V[X] = E[X<sup>2</sup>] − (E[X])<sup>2</sup></span>）で計算できる。</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT AVG(pages * pages) - AVG(pages) * AVG(pages) AS variance FROM books;
+    </pre>
+
+    <h4>GROUP BY のとき SELECT に書ける列</h4>
+    <p>標準 SQL では、GROUP BY を使う SELECT の列リストには、GROUP BY の列か集約関数しか書けない（グループ内で値が1つに定まらないため）。SQLite はこの制限を課さず、例えば <code>SELECT sid, MAX(pages) …</code> のような書き方も受け付けるが、他の RDBMS ではエラーになる。</p>
+    <h4>NOT IN と NULL</h4>
+    <p>1910 年より後に出た本のどれともページ数が一致しない本を求めるつもりで、次のように書くと結果は空になる。</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT pages FROM books WHERE year > 1910;
+sqlite> SELECT title, pages FROM books
+   ...> WHERE pages NOT IN (SELECT pages FROM books WHERE year > 1910);
+    </pre>
+    <p><code>x NOT IN (a, b, NULL)</code> は <code>x &lt;&gt; a AND x &lt;&gt; b AND x &lt;&gt; NULL</code> と同じであり、最後の項が常に UNKNOWN なので、全体が TRUE になることはない（定義 1.1）。副問合せの結果に NULL が含まれうるときは、NULL を除くか NOT EXISTS を使う。</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT title, pages FROM books
+   ...> WHERE pages NOT IN (SELECT pages FROM books WHERE year > 1910 AND pages IS NOT NULL);
+    </pre>
+    <h4>FROM 句・SELECT 句の副問合せ</h4>
+    <p>副問合せの結果は表なので、別名を付けて FROM に置ける。また、SELECT の列リストに値を返す副問合せを置ける。</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT s.name, c.n
+   ...> FROM students AS s
+   ...>   JOIN (SELECT sid, COUNT(*) AS n FROM loans GROUP BY sid) AS c ON s.sid = c.sid
+   ...> WHERE c.n >= 2;
+sqlite> SELECT b.title,
+   ...>        (SELECT COUNT(*) FROM loans AS l WHERE l.bid = b.bid) AS times
+   ...> FROM books AS b;
+    </pre>
+    <h4>ANY / ALL（SQLite では使えない）</h4>
+    <p>標準 SQL の <code>x = ANY (副問合せ)</code>（いずれかと等しい）と <code>x &lt;&gt; ALL (副問合せ)</code>（すべてと異なる）は SQLite にない。それぞれ <code>IN</code>、<code>NOT IN</code> で書ける。<code>x &gt; ALL (…)</code> は <code>x &gt; (SELECT MAX(…) …)</code> で書ける。</p>
+    <pre class="term" data-run="lib4">
+sqlite> SELECT title FROM books WHERE pages > ALL (SELECT pages FROM books WHERE year &lt; 1910);
+    </pre>
+
+    <h4>ビューの更新</h4>
+    <p>ビューに対する INSERT / UPDATE / DELETE を元の表への操作に一意に翻訳できるのは、一般に、ビューの各行・各列が1つの実表の行・列に対応する場合に限られる。集約・GROUP BY・DISTINCT・集合演算・計算列を含むビューは、ビューの1行が実表の複数行に由来するので更新できない。SQLite は、このような条件にかかわらずビューへの更新をすべて拒否する（トリガーを定義すれば可能）。</p>
+    <pre class="term" data-run="lib4">
+sqlite> UPDATE on_loan_detail SET loan_date = '2026-05-16' WHERE lid = 8;
+    </pre>
+
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 4-3</span>ビュー</div>
+      <div class="ex-body">
+        <p>返却済みの貸出について、<code>lid</code>、氏名、書名、貸出日数 <code>days</code>（返却日 − 貸出日）を列とするビュー <code>returned_loans</code> を作り、平均貸出日数を求めよ。</p>
+        <p class="small"><strong>ヒント：</strong><code>julianday('YYYY-MM-DD')</code> は日付をユリウス日（実数の日数）に変換する SQLite の関数である。</p>
+      </div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="lib4">
+sqlite> CREATE VIEW returned_loans AS
+   ...> SELECT l.lid, s.name, b.title,
+   ...>        julianday(l.return_date) - julianday(l.loan_date) AS days
+   ...> FROM loans AS l JOIN students AS s ON l.sid = s.sid JOIN books AS b ON l.bid = b.bid
+   ...> WHERE l.return_date IS NOT NULL;
+sqlite> SELECT * FROM returned_loans;
+sqlite> SELECT AVG(days) FROM returned_loans;
+        </pre>
+      </details>
+    </div>
+    <div class="exercise">
+      <div class="ex-head"><span class="tag">演習 4-4</span>総合</div>
+      <div class="ex-body"><p>クラスごとに、所属生徒数と、そのクラスの生徒による貸出の総数を求めよ。貸出のないクラスも含めること。</p></div>
+      <details class="answer"><summary>解答例</summary>
+        <pre class="term" data-run="lib4">
+sqlite> SELECT s.class, COUNT(DISTINCT s.sid) AS n_students, COUNT(l.lid) AS n_loans
+   ...> FROM students AS s LEFT JOIN loans AS l ON s.sid = l.sid
+   ...> GROUP BY s.class;
+        </pre>
+        <p class="small muted">結合により生徒の行は貸出の数だけ複製されるので、生徒数は <code>COUNT(*)</code> ではなく <code>COUNT(DISTINCT s.sid)</code> で数える。</p>
+      </details>
+    </div>
+  </section>
+
+  <!-- ===================================================== APPENDIX -->
+  <section class="chapter" id="appendix" data-num="A" data-short="付録">
+    <div class="chapter-head"><div class="label">付録</div><h2>付録</h2></div>
+
+    <h3 id="trouble" data-short="よくあるエラー"><span class="sec-num">A.1</span>よくあるエラー</h3>
+    <div class="table-wrap"><table class="plain">
+      <thead><tr><th>症状・メッセージ</th><th>原因と対処</th></tr></thead>
+      <tbody>
+        <tr><td><code>;</code> を打っても <code>...&gt;</code> のまま</td><td>引用符 <code>'</code> または <code>"</code> が閉じていない。閉じ引用符を打ってから <code>;</code> を打つ（エラーになって入力待ちに戻る）。</td></tr>
+        <tr><td><code>quit</code> と打ったら <code>...&gt;</code> になった</td><td>ドットコマンドは先頭の <code>.</code> が必要。<code>;</code> を打ってから <code>.quit</code>。</td></tr>
+        <tr><td><code>no such table: …</code></td><td>表名の誤り、または別のデータベースファイルを開いている。<code>.tables</code> と <code>.databases</code> で確認する。</td></tr>
+        <tr><td><code>UNIQUE constraint failed: …</code></td><td>主キーまたは UNIQUE 列の値が既存の行と重複している。同じ INSERT を2回実行していないか確認する。</td></tr>
+        <tr><td><code>NOT NULL constraint failed: …</code></td><td>NOT NULL 列に値を与えていない。</td></tr>
+        <tr><td><code>FOREIGN KEY constraint failed</code></td><td>参照先に存在しない値を入れようとした、または参照されている行を削除しようとした（<a href="#ch2-2">2.2</a>）。</td></tr>
+        <tr><td><code>near "…": syntax error</code></td><td>示された語の直前付近に文法の誤り。全角文字・全角空白、カンマの過不足、句の順序（<a href="#ch3-1">3.1</a>）を確認する。</td></tr>
+        <tr><td>日本語が文字化けする</td><td>端末の文字コードが UTF-8 であることを確認する。</td></tr>
+      </tbody>
+    </table></div>
+    <p>上で解決しない場合は <a href="#help">困ったとき</a> の方法で AI に質問する。</p>
+
+    <h3 data-short="SQL 早見表"><span class="sec-num">A.2</span>SQL 早見表</h3>
+    <div class="table-wrap"><table class="plain">
+      <thead><tr><th>目的</th><th>文</th></tr></thead>
+      <tbody>
+        <tr><td>表の作成</td><td><code>CREATE TABLE t (a TEXT NOT NULL PRIMARY KEY, b INTEGER);</code></td></tr>
+        <tr><td>行の追加</td><td><code>INSERT INTO t VALUES ('x', 1), ('y', 2);</code></td></tr>
+        <tr><td>検索</td><td><code>SELECT a, b FROM t WHERE b &gt;= 1 ORDER BY b DESC LIMIT 10;</code></td></tr>
+        <tr><td>更新</td><td><code>UPDATE t SET b = b + 1 WHERE a = 'x';</code></td></tr>
+        <tr><td>削除</td><td><code>DELETE FROM t WHERE a = 'x';</code></td></tr>
+        <tr><td>NULL の判定</td><td><code>WHERE b IS NULL</code></td></tr>
+        <tr><td>内部結合</td><td><code>SELECT … FROM t JOIN u ON t.a = u.a;</code></td></tr>
+        <tr><td>外部結合</td><td><code>SELECT … FROM t LEFT JOIN u ON t.a = u.a;</code></td></tr>
+        <tr><td>集約</td><td><code>SELECT a, COUNT(*) FROM t GROUP BY a HAVING COUNT(*) &gt; 1;</code></td></tr>
+        <tr><td>副問合せ</td><td><code>WHERE a IN (SELECT a FROM u)</code> / <code>WHERE NOT EXISTS (…)</code></td></tr>
+        <tr><td>ビュー</td><td><code>CREATE VIEW v AS SELECT …;</code> / <code>DROP VIEW v;</code></td></tr>
+        <tr><td>トランザクション</td><td><code>BEGIN;</code> … <code>COMMIT;</code>（取り消すなら <code>ROLLBACK;</code>）</td></tr>
+      </tbody>
+    </table></div>
+    <div class="table-wrap"><table class="plain">
+      <thead><tr><th>ドットコマンド</th><th>働き</th></tr></thead>
+      <tbody>
+        <tr><td><code>.tables</code></td><td>表とビューの一覧</td></tr>
+        <tr><td><code>.schema [名前]</code></td><td>定義（CREATE 文）の表示</td></tr>
+        <tr><td><code>.headers on</code> / <code>.mode table</code></td><td>列名の表示 / 罫線付きの表形式で表示</td></tr>
+        <tr><td><code>.nullvalue 文字列</code></td><td>NULL の表示文字列</td></tr>
+        <tr><td><code>.read ファイル</code></td><td>ファイル中の SQL を実行</td></tr>
+        <tr><td><code>.output ファイル</code> / <code>.dump</code></td><td>出力先の変更 / SQL 文としての書き出し</td></tr>
+        <tr><td><code>.help</code> / <code>.quit</code></td><td>ヘルプ / 終了</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 data-short="参考資料"><span class="sec-num">A.3</span>参考資料</h3>
+    <ul>
+      <li><a href="https://www.sqlite.org/lang.html" target="_blank" rel="noopener">SQLite: SQL As Understood By SQLite</a> — SQLite の SQL の公式リファレンス</li>
+      <li><a href="https://www.sqlite.org/foreignkeys.html" target="_blank" rel="noopener">SQLite: Foreign Key Support</a> — 外部キーの扱い</li>
+      <li><a href="https://www.sqlite.org/quirks.html" target="_blank" rel="noopener">SQLite: Quirks, Caveats, and Gotchas</a> — 他の RDBMS と異なる振る舞いの一覧</li>
+    </ul>
+  </section>
+
+  <footer class="footer">
+    <p>出力例は SQLite 3.43 で実行した結果である。バージョンによってエラーメッセージの文面が異なることがある。</p>
+  </footer>
+
+  </div>
+  </main>
+</div>
+
+<!-- Playground（補助用） -->
+<aside class="pg" id="pg" aria-label="Playground">
+  <div class="pg-head">
+    <span class="title">Playground</span>
+    <span class="spacer"></span>
+    <select id="pgDb" aria-label="データベース">
+      <option value="library">library.db（初期状態）</option>
+      <option value="empty">空のデータベース</option>
+    </select>
+    <button class="btn" id="pgReset" type="button" title="初期状態に戻す">リセット</button>
+    <button class="btn icon" id="pgClose" type="button" aria-label="閉じる">✕</button>
+  </div>
+  <div class="note">ブラウザ内の SQLite（sql.js）。確認用の補助であり、演習は自分の PC の sqlite3 で行うこと。</div>
+  <textarea spellcheck="false" placeholder="SELECT * FROM books;&#10;（⌘/Ctrl + Enter で実行）"></textarea>
+  <div class="pg-actions">
+    <label><input type="checkbox" id="pgPipe"> sqlite3 形式で表示</label>
+    <span class="spacer"></span>
+    <button class="btn primary" id="pgRun" type="button">実行</button>
+  </div>
+  <div class="pg-out"></div>
+</aside>
+<script type="text/plain" id="seed-library"><!--LIBRARY_SQL_RAW--></script>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
